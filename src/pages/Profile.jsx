@@ -73,7 +73,7 @@ const Profile = () => {
         </button>
       </div>
 
-      <style jsx>{`
+      <style>{`
         .profile-header {
           background: #fff;
           border-radius: 20px;

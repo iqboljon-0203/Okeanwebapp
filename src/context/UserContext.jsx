@@ -26,14 +26,18 @@ export const UserProvider = ({ children }) => {
       }
 
       const tgUser = tg.initDataUnsafe?.user;
+      
+      console.log('Telegram User Data:', tgUser); // Debugging
+
       if (tgUser) {
         setUser(prev => ({
           ...prev,
-          name: `${tgUser.first_name} ${tgUser.last_name || ''}`.trim(),
+          name: [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' '),
           username: tgUser.username,
           telegramId: tgUser.id,
           languageCode: tgUser.language_code,
-          avatarUrl: tgUser.photo_url, 
+          // Prioritize Telegram photo, fallback to existing if available
+          avatarUrl: tgUser.photo_url || prev.avatarUrl || '', 
         }));
       }
       
