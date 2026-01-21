@@ -1,149 +1,211 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Navigation, MapPin, Layers } from 'lucide-react';
+import { X, Navigation, MapPin, Search } from 'lucide-react';
 import { createPortal } from 'react-dom';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+
+// Fix for default marker icon in Leaflet
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: markerIcon2x,
+  iconUrl: markerIcon,
+  shadowUrl: markerShadow,
+});
 
 const LocationPicker = ({ onClose, onSelect }) => {
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
+  
   // Default: Andijon
   const [coords, setCoords] = useState([40.7821, 72.3442]); 
   const [address, setAddress] = useState('Manzil yuklanmoqda...');
-  const [mapType, setMapType] = useState('yandex#satellite'); // 'yandex#map' or 'yandex#satellite'
   const [loading, setLoading] = useState(true);
+  
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
 
+  // Initialize Map
   useEffect(() => {
-    const initMap = () => {
-      if (!window.ymaps) return;
-      
-      window.ymaps.ready(() => {
-        if (!mapContainerRef.current) return;
-        
-        // 1. Create Map
-        const map = new window.ymaps.Map(mapContainerRef.current, {
-            center: coords,
-            zoom: 18,
-            controls: ['zoomControl'],
-            type: 'yandex#hybrid' // Default Satellite Hybrid
-        }, {
-            suppressMapOpenBlock: true
-        });
+    if (!mapContainerRef.current) return;
 
-        mapInstanceRef.current = map;
-        setLoading(false);
+    // Create map instance
+    const map = L.map(mapContainerRef.current, {
+        center: coords,
+        zoom: 15, // Slightly zoomed out initially
+        zoomControl: false,
+        attributionControl: false
+    });
 
-        // 2. Handle Map Movements
-        map.events.add('actionend', () => {
-            const center = map.getCenter();
-            setCoords(center); // Update state coords
-            fetchAddress(center);
-        });
+    // Add OpenStreetMap Tile Layer
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
 
-        // Initial fetch
-        fetchAddress(coords);
-      });
-    };
+    mapInstanceRef.current = map;
+    setLoading(false);
 
-    if (window.ymaps) {
-        initMap();
-    } else {
-        // Fallback or wait for load (usually loaded in index.html)
-        const checkYmaps = setInterval(() => {
-            if (window.ymaps) {
-                clearInterval(checkYmaps);
-                initMap();
-            }
-        }, 100);
-        return () => clearInterval(checkYmaps);
-    }
+    // Initial GPS Locate
+    handleLocateMe(map);
+
+    // Event Listener for Drag End
+    map.on('moveend', () => {
+        const center = map.getCenter();
+        const newCoords = [center.lat, center.lng];
+        setCoords(newCoords);
+        fetchAddress(newCoords[0], newCoords[1]);
+    });
 
     return () => {
-        if (mapInstanceRef.current) {
-            mapInstanceRef.current.destroy();
-            mapInstanceRef.current = null;
-        }
+        map.remove();
+        mapInstanceRef.current = null;
     };
   }, []);
 
-  const fetchAddress = (coords) => {
+  const fetchAddress = async (lat, lng) => {
     setAddress('Manzil aniqlanmoqda...');
-    window.ymaps.geocode(coords).then((res) => {
-        const firstGeoObject = res.geoObjects.get(0);
-        const name = firstGeoObject.getAddressLine();
-        const shortName = [
-            firstGeoObject.getLocalities()[0], 
-            firstGeoObject.getThoroughfare() || firstGeoObject.getPremise()
-        ].filter(Boolean).join(', ');
+    
+    try {
+        // Use BigDataCloud API (Free, Client-side friendly, No CORS issues)
+        const response = await fetch(
+            `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=uz`
+        );
+        
+        const data = await response.json();
+        
+        if (data) {
+            // Construct address from available fields
+            const parts = [
+                data.locality,
+                data.city,
+                data.principalSubdivision,
+                data.countryName
+            ].filter((part) => part && part.trim() !== '');
 
-        setAddress(shortName || name);
-    });
+            // Remove duplicates (e.g. if city and locality are same)
+            const uniqueParts = [...new Set(parts)];
+            
+            setAddress(uniqueParts.join(', ') || "Noma'lum hudud");
+        } else {
+            setAddress("Manzil topilmadi");
+        }
+    } catch (err) {
+        console.error("Geocoding failed:", err);
+        // Fallback to coordinates
+        setAddress(`Koordinata: ${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+    }
   };
 
-  const toggleMapType = () => {
-      const map = mapInstanceRef.current;
-      if (!map) return;
-
-      if (mapType === 'yandex#hybrid') {
-          map.setType('yandex#map');
-          setMapType('yandex#map');
-      } else {
-          map.setType('yandex#hybrid');
-          setMapType('yandex#hybrid');
+  const handleSearch = async (e) => {
+      e.preventDefault();
+      if (!searchQuery.trim()) return;
+      
+      setIsSearching(true);
+      try {
+          // Use Photon API (based on OSM) -> No CORS issues, fast, reliable
+          const response = await fetch(
+              `https://photon.komoot.io/api/?q=${encodeURIComponent(searchQuery)}&limit=1`
+          );
+          const data = await response.json();
+          
+          if (data && data.features && data.features.length > 0) {
+              const [lng, lat] = data.features[0].geometry.coordinates; // Photon returns [lng, lat]
+              const newCoords = [lat, lng];
+              
+              if (mapInstanceRef.current) {
+                  mapInstanceRef.current.setView(newCoords, 16, { animate: true });
+                  setCoords(newCoords);
+                  fetchAddress(newCoords[0], newCoords[1]);
+              }
+          } else {
+              alert("Manzil topilmadi. Boshqa nom bilan qidirib ko'ring.");
+          }
+      } catch (err) {
+          console.error("Search failed", err);
+          alert("Qidirishda xatolik bo'ldi. Internetni tekshiring.");
+      } finally {
+          setIsSearching(false);
       }
   };
 
-  const handleLocateMe = () => {
+  const handleLocateMe = (mapInstance = mapInstanceRef.current) => {
+    if (!mapInstance) return;
     setLoading(true);
-    
-    // 1. Try Yandex Geolocation (More accurate provider)
-    window.ymaps.geolocation.get({
-        provider: 'auto', // Tries Yandex Network + Browser Geolocation
-        mapStateAutoApply: true
-    }).then((result) => {
+
+    if (!navigator.geolocation) {
+        alert("Sizning qurilmangizda geolokatsiya qo'llab-quvvatlanmaydi.");
         setLoading(false);
-        const userCoords = result.geoObjects.get(0).geometry.getCoordinates();
-        const map = mapInstanceRef.current;
-        
-        if (map) {
-            map.setCenter(userCoords, 18, {
-                checkZoomRange: true,
-                duration: 300
-            });
-            // Update state
-            setCoords(userCoords);
-            fetchAddress(userCoords);
-        }
-    }).catch((err) => {
-        console.log("Yandex Geo failed, trying native...", err);
-        
-        // 2. Fallback to Native Browser Geolocation (High Accuracy Mode)
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    const { latitude, longitude } = position.coords;
-                    if (mapInstanceRef.current) {
-                        mapInstanceRef.current.setCenter([latitude, longitude], 18, {
-                            checkZoomRange: true,
-                            duration: 300
-                        });
-                        fetchAddress([latitude, longitude]);
+        return;
+    }
+
+    const options = {
+        enableHighAccuracy: true, // Force GPS
+        timeout: 20000,           // Wait longer for satellite lock
+        maximumAge: 0             // Do not use cached older positions
+    };
+
+    let bestAcc = Infinity;
+    
+    // We use watchPosition instead of getCurrentPosition because the first result
+    // is often inaccurate (cell tower based). Subsequent updates are real GPS.
+    const watchId = navigator.geolocation.watchPosition(
+        (position) => {
+            // Check if map still exists (component might be unmounted)
+            const map = mapInstanceRef.current;
+            if (!map) return;
+
+            const { latitude, longitude, accuracy } = position.coords;
+            console.log(`GPS Update: Lat: ${latitude}, Lng: ${longitude}, Acc: ${accuracy}m`);
+
+            // Only update if this new position is better or we just started
+            if (accuracy < bestAcc) {
+                bestAcc = accuracy;
+                
+                try {
+                    // Safe move
+                    map.setView([latitude, longitude], 18, { animate: true });
+                    setCoords([latitude, longitude]);
+                    fetchAddress(latitude, longitude);
+
+                    // If accuracy is very good (< 20 meters), we can stop and convert to static
+                    if (accuracy < 20) {
+                        navigator.geolocation.clearWatch(watchId);
+                        setLoading(false);
                     }
-                    setLoading(false);
-                },
-                (error) => {
-                    console.error("Native GPS Error", error);
-                    setLoading(false);
-                    alert("Joylashuvni aniqlab bo'lmadi. GPS yoqilganligini tekshiring.");
-                },
-                { 
-                    enableHighAccuracy: true,
-                    timeout: 20000,
-                    maximumAge: 0 
+                } catch (e) {
+                    console.warn("Map update error:", e);
                 }
-            );
-        } else {
-            setLoading(false);
+            }
+        },
+        (error) => {
+            console.warn("GPS Watching Error:", error);
+            if (error.code === error.PERMISSION_DENIED) {
+                 alert("Joylashuvni aniqlashga ruxsat berilmadi. Sozlamalarni tekshiring.");
+                 setLoading(false);
+                 navigator.geolocation.clearWatch(watchId);
+            }
+        },
+        options
+    );
+
+    // Safety: Stop watching after 20 seconds
+    const timeoutId = setTimeout(() => {
+        navigator.geolocation.clearWatch(watchId);
+        setLoading(false);
+        if (bestAcc === Infinity) {
+             alert("GPS signali past. Qidiruvdan foydalaning yoki xaritani qo'lda suring.");
         }
-    });
+    }, 20000);
+
+    // Cleanup function to clear watch if component unmounts
+    return () => {
+        navigator.geolocation.clearWatch(watchId);
+        clearTimeout(timeoutId);
+    };
   };
 
   const handleConfirm = () => {
@@ -165,6 +227,22 @@ const LocationPicker = ({ onClose, onSelect }) => {
           </button>
         </div>
 
+        {/* Search Bar */}
+        <div className="search-container">
+            <form onSubmit={handleSearch} className="search-form">
+                <input 
+                    type="text" 
+                    placeholder="Qidirish... (Masalan: Andijon, Jalaquduq)" 
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="search-input"
+                />
+                <button type="submit" className="search-btn" disabled={isSearching}>
+                    {isSearching ? <div className="spinner-sm"></div> : <Search size={20} />}
+                </button>
+            </form>
+        </div>
+
         <div className="map-wrapper">
           <div ref={mapContainerRef} className="map-container" />
           
@@ -175,10 +253,7 @@ const LocationPicker = ({ onClose, onSelect }) => {
           </div>
 
           <div className="map-controls">
-            <button className="control-btn" onClick={toggleMapType}>
-                <Layers size={20} />
-            </button>
-            <button className="control-btn" onClick={handleLocateMe}>
+            <button className="control-btn" onClick={() => handleLocateMe()}>
                 <Navigation size={20} className={loading ? 'animate-spin' : ''} />
             </button>
           </div>
@@ -220,8 +295,24 @@ const LocationPicker = ({ onClose, onSelect }) => {
         .picker-header h3 { font-size: 18px; font-weight: 800; color: var(--secondary); }
         .close-btn { background: #f2f2f2; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--text-muted); }
 
+        .search-container {
+            padding: 10px 20px; background: #fff; border-bottom: 1px solid #eee; z-index: 2;
+        }
+        .search-form {
+            display: flex; gap: 8px;
+        }
+        .search-input {
+            flex: 1; height: 44px; padding: 0 16px; border-radius: 12px;
+            background: #f5f5f5; border: none; font-size: 15px; outline: none;
+        }
+        .search-input:focus { background: #eee; }
+        .search-btn {
+            width: 44px; height: 44px; background: var(--primary); color: #fff;
+            border-radius: 12px; display: flex; align-items: center; justify-content: center;
+        }
+
         .map-wrapper { flex: 1; position: relative; background: #eee; overflow: hidden; }
-        .map-container { width: 100%; height: 100%; }
+        .map-container { width: 100%; height: 100%; z-index: 1; }
 
         .center-pin {
             position: absolute; top: 50%; left: 50%;
@@ -269,6 +360,7 @@ const LocationPicker = ({ onClose, onSelect }) => {
           box-shadow: 0 4px 15px rgba(255, 75, 58, 0.3);
         }
         .animate-spin { animation: spin 1s linear infinite; }
+        .spinner-sm { width: 20px; height: 20px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
       `}</style>
     </div>,
