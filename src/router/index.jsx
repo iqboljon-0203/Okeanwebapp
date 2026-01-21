@@ -38,7 +38,7 @@ const AppRouter = () => {
         <Route path="/help" element={<Help />} />
         <Route path="*" element={<Home />} />
       </Routes>
-      <style jsx>{`
+      <style>{`
         .loading-screen {
           height: 100vh;
           display: flex;
