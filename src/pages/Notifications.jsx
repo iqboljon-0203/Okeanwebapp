@@ -1,50 +1,110 @@
-import React from 'react';
-import Header from '../components/Header';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Package, Tag, Info, Bell } from 'lucide-react';
+import { ArrowLeft, Package, Tag, Info, Bell, Loader2 } from 'lucide-react';
+import { useUser } from '../context/UserContext';
+import { supabase } from '../lib/supabase';
 
 const Notifications = () => {
   const navigate = useNavigate();
+  const { user } = useUser();
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // Mock notifications data
-  const notifications = [
-    {
-      id: 1,
-      type: 'order',
-      title: 'Buyurtma tasdiqlandi',
-      message: '№1234 raqamli buyurtmangiz qabul qilindi va tez orada yetkaziladi.',
-      time: '14:30',
-      date: 'Bugun',
-      read: false
-    },
-    {
-      id: 2,
-      type: 'promo',
-      title: 'Dam olish kunlari aksiyasi!',
-      message: 'Shanba va Yakshanba kunlari barcha mevalarga 20% chegirma.',
-      time: '10:00',
-      date: 'Kecha',
-      read: true
-    },
-    {
-      id: 3,
-      type: 'order',
-      title: 'Buyurtma yetkazildi',
-      message: '№1230 raqamli buyurtmangiz muvaffaqiyatli yetkazildi. Xaridingiz uchun rahmat!',
-      time: '18:45',
-      date: '19 Yan',
-      read: true
-    },
-    {
-      id: 4,
-      type: 'system',
-      title: 'Ilova yangilandi',
-      message: 'Biz ilovani yanada tezroq va qulayroq qildik. Yangi imkoniyatlarni sinab ko\'ring.',
-      time: '09:15',
-      date: '18 Yan',
-      read: true
+  useEffect(() => {
+    fetchNotifications();
+
+    if (!user?.telegramId) return;
+
+    const subscription = supabase
+        .channel('public:orders:user')
+        .on('postgres_changes', { 
+            event: '*', 
+            schema: 'public', 
+            table: 'orders',
+            filter: `user_id=eq.${user.telegramId}`
+        }, () => {
+            fetchNotifications();
+        })
+        .subscribe();
+
+    return () => {
+        supabase.removeChannel(subscription);
+    };
+  }, [user]);
+
+  const fetchNotifications = async () => {
+    if (!user?.telegramId) {
+        setLoading(false);
+        return;
     }
-  ];
+
+    try {
+        // Fetch User Orders
+        const { data: orders, error } = await supabase
+            .from('orders')
+            .select('*')
+            .eq('user_id', user.telegramId)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        // Transform orders into notifications
+        const notifs = (orders || []).map(order => {
+            let title = 'Buyurtma holati';
+            let message = '';
+            let type = 'system';
+            let isUnread = false; // Simple logic: if status is 'new' consider it unread/active
+
+            switch (order.status) {
+                case 'new':
+                    title = 'Buyurtma qabul qilindi';
+                    message = `№${order.id} raqamli buyurtmangiz qabul qilindi va tez orada ko'rib chiqiladi.`;
+                    type = 'order';
+                    isUnread = true;
+                    break;
+                case 'pending':
+                    title = 'Buyurtma tasdiqlandi';
+                    message = `№${order.id} raqamli buyurtmangiz tasdiqlandi va yetkazib berishga tayyorlanmoqda.`;
+                    type = 'order';
+                    break;
+                case 'delivered':
+                    title = 'Buyurtma yetkazildi';
+                    message = `№${order.id} raqamli buyurtmangiz muvaffaqiyatli yetkazildi. Xaridingiz uchun rahmat!`;
+                    type = 'order';
+                    break;
+                case 'canceled':
+                    title = 'Buyurtma bekor qilindi';
+                    message = `№${order.id} raqamli buyurtmangiz bekor qilindi.`;
+                    type = 'system'; // different color maybe
+                    break;
+                default:
+                    message = `№${order.id} raqamli buyurtma holati: ${order.status}`;
+            }
+
+            const dateObj = new Date(order.created_at);
+            const isToday = dateObj.toLocaleDateString() === new Date().toLocaleDateString();
+            const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            return {
+                id: order.id,
+                type,
+                title,
+                message,
+                time: timeStr,
+                date: isToday ? 'Bugun' : dateObj.toLocaleDateString(),
+                read: !isUnread
+            };
+        });
+
+        // Optional: Add static promo notifications here if needed in future
+        setNotifications(notifs);
+
+    } catch (error) {
+        console.error("Error fetching notifications:", error);
+    } finally {
+        setLoading(false);
+    }
+  };
 
   const getIcon = (type) => {
     switch (type) {
@@ -75,26 +135,37 @@ const Notifications = () => {
       </div>
 
       <div className="page-container">
-        <div className="notifications-list">
-          {notifications.map((item) => (
-            <div key={item.id} className={`notification-card ${!item.read ? 'unread' : ''}`}>
-              <div className="icon-box" style={{ background: getBgColor(item.type) }}>
-                {getIcon(item.type)}
-                {!item.read && <div className="dot"></div>}
-              </div>
-              <div className="content">
-                <div className="header">
-                  <h3>{item.title}</h3>
-                  <span className="time">{item.date}, {item.time}</span>
-                </div>
-                <p>{item.message}</p>
-              </div>
+        {loading ? (
+            <div className="loading-state">
+                <Loader2 className="spin" size={30} color="var(--primary)" />
             </div>
-          ))}
-        </div>
+        ) : notifications.length === 0 ? (
+            <div className="empty-state">
+                <Bell size={48} color="#ddd" />
+                <p>Bildirishnomalar yo'q</p>
+            </div>
+        ) : (
+            <div className="notifications-list">
+            {notifications.map((item) => (
+                <div key={item.id} className={`notification-card ${!item.read ? 'unread' : ''}`}>
+                <div className="icon-box" style={{ background: getBgColor(item.type) }}>
+                    {getIcon(item.type)}
+                    {!item.read && <div className="dot"></div>}
+                </div>
+                <div className="content">
+                    <div className="header">
+                    <h3>{item.title}</h3>
+                    <span className="time">{item.date}, {item.time}</span>
+                    </div>
+                    <p>{item.message}</p>
+                </div>
+                </div>
+            ))}
+            </div>
+        )}
       </div>
 
-      <style jsx>{`
+      <style>{`
         .page-header {
           padding: 15px 16px;
           display: flex;
@@ -198,6 +269,13 @@ const Notifications = () => {
           color: var(--text-muted);
           line-height: 1.4;
         }
+
+        .loading-state, .empty-state {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 50px 0; color: #aaa; gap: 10px;
+        }
+        .spin { animation: spin 1s linear infinite; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
       `}</style>
     </div>
   );

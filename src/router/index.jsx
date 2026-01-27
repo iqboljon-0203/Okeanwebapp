@@ -11,6 +11,8 @@ const Notifications = lazy(() => import('../pages/Notifications'));
 const Addresses = lazy(() => import('../pages/Addresses'));
 const Security = lazy(() => import('../pages/Security'));
 const Help = lazy(() => import('../pages/Help'));
+const Admin = lazy(() => import('../pages/Admin'));
+import ProtectedAdminRoute from '../components/ProtectedAdminRoute';
 
 const AppRouter = () => {
   const location = useLocation();
@@ -36,6 +38,14 @@ const AppRouter = () => {
         <Route path="/addresses" element={<Addresses />} />
         <Route path="/security" element={<Security />} />
         <Route path="/help" element={<Help />} />
+        
+        {/* Admin Route */}
+        <Route path="/admin" element={
+          <ProtectedAdminRoute>
+            <Admin />
+          </ProtectedAdminRoute>
+        } />
+
         <Route path="*" element={<Home />} />
       </Routes>
       <style>{`

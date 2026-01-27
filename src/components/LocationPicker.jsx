@@ -70,33 +70,57 @@ const LocationPicker = ({ onClose, onSelect }) => {
     setAddress('Manzil aniqlanmoqda...');
     
     try {
-        // Use BigDataCloud API (Free, Client-side friendly, No CORS issues)
+        // Use Photon (Komoot) API - High accuracy, based on OSM, CORS friendly and fast
         const response = await fetch(
-            `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=uz`
+            `https://photon.komoot.io/reverse?lon=${lng}&lat=${lat}`
         );
         
+        if (!response.ok) throw new Error("Photon API failed");
+
         const data = await response.json();
         
-        if (data) {
-            // Construct address from available fields
-            const parts = [
-                data.locality,
-                data.city,
-                data.principalSubdivision,
-                data.countryName
-            ].filter((part) => part && part.trim() !== '');
-
-            // Remove duplicates (e.g. if city and locality are same)
-            const uniqueParts = [...new Set(parts)];
+        if (data && data.features && data.features.length > 0) {
+            const props = data.features[0].properties;
             
-            setAddress(uniqueParts.join(', ') || "Noma'lum hudud");
+            // Build meaningful address string
+            // Photon returns: name, street, housenumber, city, state, country, postcode
+            const parts = [
+                props.name,
+                props.housenumber ? `${props.housenumber}-uy` : '',
+                props.street,
+                props.district || props.suburb,
+                props.city || props.town,
+                props.state
+            ].filter(p => p && p.trim() !== '');
+
+            // Remove adjacent duplicates (simple check)
+            const uniqueParts = parts.filter((item, pos, arr) => {
+                return pos === 0 || item !== arr[pos - 1];
+            });
+            
+            const formattedAddress = uniqueParts.join(', ');
+            setAddress(formattedAddress || "Noma'lum hudud");
         } else {
-            setAddress("Manzil topilmadi");
+            throw new Error("No results from Photon");
         }
     } catch (err) {
-        console.error("Geocoding failed:", err);
-        // Fallback to coordinates
-        setAddress(`Koordinata: ${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+        console.warn("Primary geocoding failed, trying fallback...", err);
+        // Fallback: BigDataCloud
+        try {
+             const response = await fetch(
+                `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=uz`
+            );
+            const data = await response.json();
+            if(data && (data.city || data.locality)) {
+                // Construct fallback address
+                const parts = [data.locality, data.city, data.principalSubdivision].filter(Boolean);
+                setAddress([...new Set(parts)].join(', '));
+            } else {
+                setAddress(`Koordinata: ${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+            }
+        } catch(e) {
+            setAddress(`Koordinata: ${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+        }
     }
   };
 

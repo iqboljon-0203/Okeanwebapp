@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { getStorageItem, setStorageItem } from '../utils/storage';
+import { supabase } from '../lib/supabase';
 
 const UserContext = createContext();
 
@@ -8,49 +9,121 @@ export const UserProvider = ({ children }) => {
     name: 'Mehmon', 
     phone: '', 
     address: '',
-    coords: null, // Saqlangan koordinatalar
-    avatarUrl: ''
+    avatarUrl: '',
+    telegramId: null,
+    role: 'admin' // TEST MODE: Admin huquqi berildi
   }));
   
   const [favorites, setFavorites] = useState(() => getStorageItem('favorites', []));
 
   useEffect(() => {
-    // Initialize Telegram Web App
-    const tg = window.Telegram?.WebApp;
-    if (tg) {
-      tg.ready();
-      try {
-        tg.expand();
-      } catch (e) {
-        console.error('Error expanding TG WebApp', e);
-      }
+    // TEST UCHUN: Majburiy Admin qilish (Eski localStorage ni ignor qilish uchun)
+    setUser(prev => ({ ...prev, role: 'admin' }));
 
-      const tgUser = tg.initDataUnsafe?.user;
-      
-      console.log('Telegram User Data:', tgUser); // Debugging
-
-      if (tgUser) {
-        setUser(prev => ({
-          ...prev,
-          name: [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' '),
-          username: tgUser.username,
-          telegramId: tgUser.id,
-          languageCode: tgUser.language_code,
-          // Prioritize Telegram photo, fallback to existing if available
-          avatarUrl: tgUser.photo_url || prev.avatarUrl || '', 
-        }));
-      }
-      
-      // Set header color (Safe check)
-      try {
-        if (parseFloat(tg.version) >= 6.1) {
-          tg.setHeaderColor('#ffffff');
-          tg.setBackgroundColor('#f2f2f2');
+    const initUser = async () => {
+      // Initialize Telegram Web App
+      const tg = window.Telegram?.WebApp;
+      if (tg) {
+        tg.ready();
+        try {
+          tg.expand();
+          if (parseFloat(tg.version) >= 6.1) {
+            tg.setHeaderColor('#ffffff');
+            tg.setBackgroundColor('#f2f2f2');
+          }
+        } catch (e) {
+          console.error(e);
         }
-      } catch (e) {
-        console.log('Color setting not supported in this version');
+
+        const tgUser = tg.initDataUnsafe?.user;
+
+        if (tgUser) {
+          const fullName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ');
+          
+          // Sync with Supabase (Telegram User)
+          try {
+            const { data: existingProfile } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('telegram_id', tgUser.id)
+                .single();
+
+            let role = 'user';
+
+            if (!existingProfile) {
+                await supabase.from('profiles').insert([{
+                    telegram_id: tgUser.id,
+                    full_name: fullName,
+                    username: tgUser.username,
+                    avatar_url: tgUser.photo_url
+                }]);
+            } else {
+                role = existingProfile.role || 'user';
+            }
+
+            setUser(prev => ({
+              ...prev,
+              name: fullName,
+              username: tgUser.username,
+              telegramId: tgUser.id,
+              languageCode: tgUser.language_code,
+              avatarUrl: tgUser.photo_url || prev.avatarUrl || '',
+              role: role 
+            }));
+
+          } catch (err) {
+            console.error("Supabase Profile Sync Error:", err);
+          }
+        } else {
+            // BROWSER / GUEST MODE
+            // Telegram WebApp ichida emasmiz, demak brauzerda test qilyapmiz 
+            // yoki oddiy sayt sifatida ochilgan.
+            
+            const guestId = getStorageItem('guest_id') || Math.floor(100000000 + Math.random() * 900000000);
+            if (!getStorageItem('guest_id')) {
+                setStorageItem('guest_id', guestId);
+            }
+
+            // Ensure profile exists for Guest
+            try {
+                const { data: existingProfile } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .eq('telegram_id', guestId)
+                    .single();
+                
+                let role = 'user';
+                if (!existingProfile) {
+                     await supabase.from('profiles').insert([{
+                        telegram_id: guestId,
+                        full_name: 'Mehmon (Browser)',
+                        username: 'guest_' + guestId,
+                        avatar_url: ''
+                    }]);
+                } else {
+                    role = existingProfile.role || 'user';
+                }
+
+                setUser(prev => ({
+                    ...prev,
+                    name: prev.name === 'Mehmon' ? 'Mehmon (Browser)' : prev.name,
+                    telegramId: guestId,
+                    role: role
+                }));
+            } catch (err) {
+                console.error("Guest Profile Sync Error:", err);
+            }
+        }
+      } else {
+         // Fallback if window.Telegram is totally missing (rare but possible in standard browsers)
+          const guestId = getStorageItem('guest_id') || Math.floor(100000000 + Math.random() * 900000000);
+          if (!getStorageItem('guest_id')) setStorageItem('guest_id', guestId);
+          
+          setUser(prev => ({ ...prev, telegramId: guestId }));
       }
-    }
+    };
+
+    initUser();
   }, []);
 
   useEffect(() => {
@@ -71,21 +144,14 @@ export const UserProvider = ({ children }) => {
 
   const isFavorite = (productId) => favorites.includes(productId);
 
-  // Re-added updateProfile function
   const updateProfile = (newData) => {
     setUser(prev => ({ ...prev, ...newData }));
   };
 
   const logout = () => {
-    // Clear local storage logic if you want to reset user data
-    // setStorageItem('user', null); 
-    // setStorageItem('favorites', []);
-    
-    // Close Telegram Web App
     if (window.Telegram?.WebApp) {
       window.Telegram.WebApp.close();
     } else {
-      // Browser fallback
       window.location.reload();
     }
   };

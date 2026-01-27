@@ -30,12 +30,12 @@ const Help = () => {
           </div>
           <h3>Savolingiz bormi?</h3>
           <p>Bizning operatorlarimiz 24/7 aloqada. Har qanday savol bilan murojaat qilishingiz mumkin.</p>
-          <button className="contact-btn">
+          <a href="https://t.me/musulman_0201" target="_blank" rel="noopener noreferrer" className="contact-btn">
             <MessageCircle size={20} /> Adminga yozish
-          </button>
-          <button className="phone-btn">
-            <Phone size={20} /> +998 90 123 45 67
-          </button>
+          </a>
+          <a href="tel:+998552010501" className="phone-btn">
+            <Phone size={20} /> +998 55-201-05-01
+          </a>
         </div>
 
         <h3 className="section-title">Ko'p beriladigan savollar</h3>

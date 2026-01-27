@@ -4,7 +4,7 @@ import { useLocation } from 'react-router-dom';
 
 const MainLayout = ({ children }) => {
   const location = useLocation();
-  const hideNavRoutes = ['/checkout'];
+  const hideNavRoutes = ['/checkout', '/admin'];
   const showNav = !hideNavRoutes.includes(location.pathname);
 
   return (

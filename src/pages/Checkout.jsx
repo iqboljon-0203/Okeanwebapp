@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useUser } from '../context/UserContext';
-import { createOrder } from '../api/orders.api';
 import { ArrowLeft, MapPin, CreditCard, MessageCircle, User as UserIcon, CheckCircle2, Truck, Wallet } from 'lucide-react';
 import { formatPrice } from '../utils/price';
 import { toast } from 'react-hot-toast';
@@ -10,7 +9,7 @@ import LocationPicker from '../components/LocationPicker';
 
 const Checkout = () => {
   const navigate = useNavigate();
-  const { cartItems, total, clearCart } = useCart();
+  const { cartItems, total, clearCart, submitOrder } = useCart();
   const { user, updateProfile } = useUser();
   
   const [loading, setLoading] = useState(false);
@@ -62,44 +61,37 @@ const Checkout = () => {
     
     try {
       setLoading(true);
-      const order = {
-        items: cartItems.map(item => ({
-          id: item.product.id,
-          name: item.product.name,
-          qty: item.quantity,
-          unit: item.product.unit,
-          price: item.product.discountPrice || item.product.price,
-          total: (item.product.discountPrice || item.product.price) * item.quantity
-        })),
-        total,
-        customer: {
-            name: formData.name,
-            phone: `+998${formData.phone}`,
-            address: formData.address,
-            coords: formData.coords,
-            comment: formData.comment
-        },
-        paymentMethod: formData.paymentMethod,
-        createdAt: new Date().toISOString()
-      };
-      
-      // Send data to Telegram Bot (Main Logic)
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.sendData(JSON.stringify(order));
-      }
 
-      // Simulate API call
-      const result = await createOrder(order);
+      // Submit to Supabase
+      const result = await submitOrder({
+          userId: user.telegramId, // Might be undefined for guest, configured in CartContext to handle null
+          address: formData.address,
+          coords: formData.coords,
+          phone: `+998${formData.phone}`,
+          total: total
+      });
       
       if (result.success) {
         setOrderId(result.orderId);
         setSuccess(true);
-        clearCart();
+        // clearCart is called inside submitOrder
         updateProfile({ 
           name: formData.name, 
           phone: formData.phone 
         });
+        
+        // Optional: Send data to Telegram Bot also if needed for other bot logic
+        if (window.Telegram?.WebApp) {
+            window.Telegram.WebApp.sendData(JSON.stringify({
+                order_id: result.orderId,
+                total,
+                status: 'new'
+            }));
+        }
+
         toast.success('Buyurtmangiz qabul qilindi!');
+      } else {
+          toast.error(result.message || 'Xatolik yuz berdi');
       }
     } catch (err) {
       toast.error('Buyurtma berishda xatolik yuz berdi');

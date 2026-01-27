@@ -1,12 +1,57 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Header from '../components/Header';
 import { useUser } from '../context/UserContext';
 import { User, MapPin, Bell, ShieldCheck, HelpCircle, LogOut, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 
 const Profile = () => {
   const { user, logout } = useUser();
   const navigate = useNavigate();
+  const [stats, setStats] = useState({
+    orders: 0,
+    coupons: 0,
+    points: 0
+  });
+
+  useEffect(() => {
+    const fetchStats = async () => {
+        if (!user || !user.telegramId) return;
+
+        try {
+            // 1. Get Orders Count
+            const { count: ordersCount, error: orderError } = await supabase
+                .from('orders')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', user.telegramId);
+
+            // 2. Get Points
+            const { data: profileData } = await supabase
+                .from('profiles')
+                .select('points')
+                .eq('telegram_id', user.telegramId)
+                .single();
+
+            // 3. Get Coupons Count
+            // Assuming we have a 'user_coupons' table
+            const { count: couponsCount } = await supabase
+                .from('user_coupons')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', user.telegramId)
+                .eq('is_used', false);
+
+            setStats({
+                orders: ordersCount || 0,
+                coupons: couponsCount || 0,
+                points: profileData?.points || 0
+            });
+        } catch (error) {
+            console.error("Error fetching profile stats:", error);
+        }
+    };
+
+    fetchStats();
+  }, [user]);
 
   const menuItems = [
     { icon: <MapPin size={20} />, label: 'Mening manzillarim', color: '#4facfe', path: '/addresses' },
@@ -38,15 +83,15 @@ const Profile = () => {
 
         <div className="stats-grid">
           <div className="stat-card shadow">
-            <span className="value">12</span>
+            <span className="value">{stats.orders}</span>
             <span className="label">Buyurtmalar</span>
           </div>
           <div className="stat-card shadow">
-            <span className="value">0</span>
+            <span className="value">{stats.coupons}</span>
             <span className="label">Kuponlar</span>
           </div>
           <div className="stat-card shadow">
-            <span className="value">150</span>
+            <span className="value">{stats.points}</span>
             <span className="label">Ballar</span>
           </div>
         </div>

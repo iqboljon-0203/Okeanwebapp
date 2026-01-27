@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { getStorageItem, setStorageItem } from '../utils/storage';
 import { toast } from 'react-hot-toast';
+import { supabase } from '../lib/supabase';
 
 const CartContext = createContext();
 
@@ -78,6 +79,54 @@ export const CartProvider = ({ children }) => {
     return { subtotal, deliveryFee, total, count: cartItems.length };
   }, [cartItems]);
 
+  const submitOrder = async (orderData) => {
+    const { address, coords, phone, userId, total } = orderData;
+    
+    // Validation
+    if (cartItems.length === 0) return { success: false, message: 'Savat bo\'sh' };
+
+    try {
+        // 1. Create Order
+        const { data: order, error: orderError } = await supabase
+            .from('orders')
+            .insert([{
+                user_id: userId, // Can be null if guest, but ideally we have a telegram_id
+                total_price: total,
+                status: 'new',
+                location_lat: coords ? coords[0] : null,
+                location_long: coords ? coords[1] : null,
+                address_text: address,
+                phone: phone
+            }])
+            .select()
+            .single();
+
+        if (orderError) throw orderError;
+
+        // 2. Create Order Items
+        const orderItemsData = cartItems.map(item => ({
+            order_id: order.id,
+            product_id: item.product.id,
+            quantity: item.quantity,
+            price_at_time: item.product.discountPrice || item.product.price
+        }));
+
+        const { error: itemsError } = await supabase
+            .from('order_items')
+            .insert(orderItemsData);
+
+        if (itemsError) throw itemsError;
+
+        // Success
+        clearCart();
+        return { success: true, orderId: order.id };
+
+    } catch (error) {
+        console.error('Order submission error:', error);
+        return { success: false, message: error.message };
+    }
+  };
+
   return (
     <CartContext.Provider value={{
       cartItems,
@@ -86,6 +135,7 @@ export const CartProvider = ({ children }) => {
       increaseQty,
       decreaseQty,
       clearCart,
+      submitOrder,
       ...totals
     }}>
       {children}

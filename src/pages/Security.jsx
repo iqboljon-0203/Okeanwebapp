@@ -48,11 +48,11 @@ const Security = () => {
       desc: 'Dasturiy ta\'minot litsenziyasi',
       content: `Okean Market litsenziyasi.
 Versiya: 1.0.0
-Litsenziya raqami: OM-2024-X789
+Litsenziya raqami: OM-2026-X789
 
 Ushbu dasturiy ta'minot mualliflik huquqi bilan himoyalangan. Nusxalash, o'zgartirish yoki ruxsatsiz tarqatish taqiqlanadi.
 
-© 2024 Okean Market LLC.`
+© 2026 Okean Market LLC.`
     },
   ];
 
@@ -87,7 +87,7 @@ Ushbu dasturiy ta'minot mualliflik huquqi bilan himoyalangan. Nusxalash, o'zgart
         
         <div className="security-footer">
           <p>Versiya 1.0.0</p>
-          <p>© 2024 Okean Market. Barcha huquqlar himoyalangan.</p>
+          <p>© 2026 Okean Market. Barcha huquqlar himoyalangan.</p>
         </div>
       </div>
 

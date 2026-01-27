@@ -1,14 +1,34 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useUser } from '../context/UserContext';
 import { useCart } from '../context/CartContext';
-import { ShoppingBag, ChevronDown, MapPin, ShoppingCart } from 'lucide-react';
+import { ShoppingBag, ChevronDown, MapPin, ShoppingCart, Bell } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import LocationPicker from './LocationPicker';
+import AddressSelector from './AddressSelector';
+import { supabase } from '../lib/supabase';
 
 const Header = () => {
   const { user, updateProfile } = useUser();
   const { count } = useCart();
   const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [showAddressSelector, setShowAddressSelector] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    const fetchUnread = async () => {
+        if (!user?.telegramId) return;
+        // Count unread notifications (e.g. status='new' or 'delivered' within last 24h)
+        // For MVP: status = 'new' orders are considered unread/important
+        const { count } = await supabase
+            .from('orders')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', user.telegramId)
+            .eq('status', 'new');
+        
+        setUnreadCount(count || 0);
+    };
+    fetchUnread();
+  }, [user]);
 
   const handleLocationSelect = (data) => {
     updateProfile({ 
@@ -32,13 +52,20 @@ const Header = () => {
           </div>
         </Link>
         
-        <Link to="/cart" className="header-cart shadow-sm">
-          <ShoppingBag size={20} />
-          {count > 0 && <span className="badge">{count}</span>}
-        </Link>
+        <div className="header-actions">
+            <Link to="/notifications" className="header-btn shadow-sm">
+                <Bell size={20} />
+                {unreadCount > 0 && <span className="badge">{unreadCount}</span>}
+            </Link>
+            
+            <Link to="/cart" className="header-btn shadow-sm">
+                <ShoppingBag size={20} />
+                {count > 0 && <span className="badge cart-badge">{count}</span>}
+            </Link>
+        </div>
       </div>
 
-      <div className="header-location shadow-sm" onClick={() => setShowLocationPicker(true)}>
+      <div className="header-location shadow-sm" onClick={() => setShowAddressSelector(true)}>
         <div className="loc-icon">
           <MapPin size={16} />
         </div>
@@ -49,6 +76,20 @@ const Header = () => {
           </span>
         </div>
       </div>
+
+      {showAddressSelector && (
+        <AddressSelector 
+          onClose={() => setShowAddressSelector(false)}
+          onSelect={(data) => {
+            handleLocationSelect(data);
+            setShowAddressSelector(false);
+          }}
+          onAddNew={() => {
+            setShowAddressSelector(false);
+            setShowLocationPicker(true);
+          }}
+        />
+      )}
 
       {showLocationPicker && (
         <LocationPicker 
@@ -108,7 +149,10 @@ const Header = () => {
           color: #00302D;
           letter-spacing: 1px;
         }
-        .header-cart {
+        .header-actions {
+          display: flex; gap: 10px; align-items: center;
+        }
+        .header-btn {
           width: 42px;
           height: 42px;
           background: #F8F9FA;
@@ -119,11 +163,11 @@ const Header = () => {
           position: relative;
           color: var(--secondary);
         }
-        .header-cart .badge {
+        .header-btn .badge {
           position: absolute;
           top: -5px;
           right: -5px;
-          background: var(--primary);
+          background: #FF4B3A; /* Red for alert */
           color: #fff;
           font-size: 10px;
           font-weight: 800;
@@ -134,6 +178,9 @@ const Header = () => {
           align-items: center;
           justify-content: center;
           border: 2px solid #fff;
+        }
+        .header-btn .cart-badge {
+            background: var(--primary); /* Maintain primary color for cart */
         }
         .header-location {
           display: flex;
