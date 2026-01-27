@@ -11,16 +11,14 @@ export const UserProvider = ({ children }) => {
     address: '',
     avatarUrl: '',
     telegramId: null,
-    role: 'admin' // TEST MODE: Admin huquqi berildi
+    role: 'user'
   }));
   
   const [favorites, setFavorites] = useState(() => getStorageItem('favorites', []));
 
   useEffect(() => {
-    // TEST UCHUN: Majburiy Admin qilish (Eski localStorage ni ignor qilish uchun)
-    setUser(prev => ({ ...prev, role: 'admin' }));
-
     const initUser = async () => {
+      console.log("initUser started");
       // Initialize Telegram Web App
       const tg = window.Telegram?.WebApp;
       if (tg) {
