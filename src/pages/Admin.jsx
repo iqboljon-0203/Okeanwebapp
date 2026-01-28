@@ -654,7 +654,7 @@ const Admin = () => {
                         <Users size={24} color="#fff" />
                      </div>
                      <div className="c-info">
-                         <h4>{courier.first_name || 'Kuryer'} {courier.last_name || ''}</h4>
+                         <h4>{courier.full_name || courier.name || 'Kuryer'}</h4>
                          <p>{courier.phone_number || 'Tel raqam yo\'q'}</p>
                      </div>
                      <div className="c-stats">

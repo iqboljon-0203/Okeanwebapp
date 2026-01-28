@@ -65,7 +65,7 @@ const Courier = () => {
                      telegram_id: Math.floor(Math.random() * 1000000000), // Random ID
                      full_name: 'Test Courier',
                      role: 'courier',
-                     phone_number: '+998901234567'
+                     phone_number: '+998552010501'
                  }]).select().single();
                  
                  if (newCourier) {
@@ -197,7 +197,7 @@ const Courier = () => {
                                     onClick={() => openMap(activeOrder)}
                                 >
                                     <Navigation size={18} />
-                                    Haritada ko'rish
+                                    Xaritada ko'rish
                                 </button>
 
 
@@ -221,7 +221,7 @@ const Courier = () => {
                 <div className="header-top">
                 <div>
                     <h1>Kuryer Paneli</h1>
-                    <p>Xush kelibsiz, {user.first_name || 'Kuryer'}</p>
+                    <p>Xush kelibsiz, {user.name || 'Kuryer'}</p>
                 </div>
                 <button className="refresh-btn" onClick={handleRefresh}>
                     <RefreshCw size={20} className={loading ? 'spin' : ''} />
@@ -331,7 +331,7 @@ const Courier = () => {
                                     onClick={() => openMap(activeOrder)}
                                 >
                                     <Navigation size={18} />
-                                    Haritada ko'rish
+                                    Xaritada ko'rish
                                 </button>
                             </div>
                         </div>
@@ -451,8 +451,14 @@ const Courier = () => {
       {activeView === 'profile' && (
         <div className="content-area pt-20">
              <div className="courier-profile-card">
-                 <div className="avatar-circle">{user.first_name?.[0]}</div>
-                 <h3>{user.first_name} {user.last_name}</h3>
+                 <div className="avatar-circle">
+                    {user.avatarUrl ? (
+                        <img src={user.avatarUrl} alt="Avatar" style={{width:'100%', height:'100%', objectFit:'cover'}} />
+                    ) : (
+                        user.name?.[0] || 'K'
+                    )}
+                 </div>
+                 <h3>{user.name || 'Kuryer'}</h3>
                  <p className="role-batch">Kuryer</p>
                  
                  <div className="stats-row">
@@ -546,10 +552,10 @@ const Courier = () => {
                 </div>
                 <h3>Biz bilan bog'lanish</h3>
                 <p className="text-gray-500 text-sm mb-4">Savollaringiz bormi? Bizga qo'ng'iroq qiling yoki yozing.</p>
-                <a href="tel:+998901234567" className="action-btn black mb-3">
-                    <Phone size={18} /> +998 90 123 45 67
+                <a href="tel:+998552010501" className="action-btn black mb-3">
+                    <Phone size={18} /> +998552010501
                 </a>
-                <a href="https://t.me/okean_support" target="_blank" className="action-btn" style={{background:'#0088cc', color:'#fff'}}>
+                <a href="https://t.me/musulman_0201" target="_blank" className="action-btn" style={{background:'#0088cc', color:'#fff'}}>
                      Telegram orqali yozish
                 </a>
             </div>
@@ -762,6 +768,7 @@ const Courier = () => {
             border-radius: 50%; font-size: 32px; font-weight: 800;
             display: flex; align-items: center; justify-content: center; margin-bottom: 15px;
             box-shadow: 0 10px 25px rgba(255,75,58,0.3);
+            overflow: hidden;
         }
         .role-batch {
             background: #ebf8ff; color: #0088cc; padding: 4px 12px;

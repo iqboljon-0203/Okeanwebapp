@@ -69,17 +69,38 @@ export const UserProvider = ({ children }) => {
                 }
             } else {
                 role = existingProfile.role || 'user';
+                
+                // Check if we need to update avatar or name if changed in Telegram
+                const updates = {};
+                if (tgUser.photo_url && tgUser.photo_url !== existingProfile.avatar_url) {
+                    updates.avatar_url = tgUser.photo_url;
+                }
+                if (fullName !== existingProfile.full_name) {
+                    updates.full_name = fullName;
+                }
+                if (tgUser.username !== existingProfile.username) {
+                    updates.username = tgUser.username;
+                }
+
+                if (Object.keys(updates).length > 0) {
+                    await supabase.from('profiles')
+                        .update(updates)
+                        .eq('id', existingProfile.id);
+                    
+                    // Update local reference
+                    existingProfile = { ...existingProfile, ...updates };
+                }
             }
 
             if (existingProfile) {
                 setUser(prev => ({
                 ...prev,
                 id: existingProfile.id, // Store UUID!
-                name: fullName,
-                username: tgUser.username,
+                name: existingProfile.full_name || fullName,
+                username: existingProfile.username || tgUser.username,
                 telegramId: tgUser.id,
                 languageCode: tgUser.language_code,
-                avatarUrl: tgUser.photo_url || prev.avatarUrl || '',
+                avatarUrl: tgUser.photo_url || existingProfile.avatar_url || prev.avatarUrl || '',
                 role: role 
                 }));
             }
@@ -135,6 +156,7 @@ export const UserProvider = ({ children }) => {
                         id: existingProfile.id, // Store UUID
                         name: prev.name === 'Mehmon' ? 'Mehmon (Browser)' : prev.name,
                         telegramId: guestId,
+                        avatarUrl: existingProfile.avatar_url || prev.avatarUrl || '',
                         role: role
                     }));
                 }
