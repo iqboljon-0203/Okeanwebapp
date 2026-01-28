@@ -14,8 +14,11 @@ const ProtectedCourierRoute = ({ children }) => {
   }
 
   if (user?.role !== 'courier') {
+    console.warn("ProtectedCourierRoute: Access Denied. Role is:", user?.role);
     return <Navigate to="/" replace />;
   }
+  
+  console.log("ProtectedCourierRoute: Access Granted");
 
   return children ? children : <Outlet />;
 };

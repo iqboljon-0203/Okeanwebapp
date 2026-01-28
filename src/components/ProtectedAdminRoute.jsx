@@ -10,8 +10,11 @@ const ProtectedAdminRoute = ({ children }) => {
   // Assuming 'user' defaults to 'user' role or null.
   
   if (user?.role !== 'admin') {
+    console.warn("ProtectedAdminRoute: Access Denied. Role is:", user?.role);
     return <Navigate to="/" replace />;
   }
+
+  console.log("ProtectedAdminRoute: Access Granted");
 
   return children ? children : <Outlet />;
 };

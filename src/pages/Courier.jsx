@@ -12,7 +12,7 @@ import toast from 'react-hot-toast';
 import CourierBottomNav from '../components/CourierBottomNav';
 
 const Courier = () => {
-  const { user } = useUser();
+  const { user, logout } = useUser();
   const [activeTab, setActiveTab] = useState('pool'); // pool | active
   const [activeView, setActiveView] = useState('home'); // home | history | profile
   
@@ -30,11 +30,24 @@ const Courier = () => {
           // 1. Try to fetch by Telegram ID
           if (!user.id && user.telegramId) {
               console.log("User ID missing, fetching from DB using telegram_id...", user.telegramId);
-              const { data } = await supabase.from('profiles').select('id').eq('telegram_id', user.telegramId).single();
+              const { data, error } = await supabase.from('profiles').select('*').eq('telegram_id', user.telegramId).maybeSingle();
+              
+              if (error) {
+                  console.error("Error fetching profile for ID:", error);
+              }
+              
               if (data) {
-                  console.log("Fetched ID:", data.id);
-                  user.id = data.id; 
+                  console.log("Fetched Profile Data:", data);
+                  if (data.id) {
+                      user.id = data.id;
+                      // Persist if found
+                      // setStorageItem('user', user); 
+                  } else {
+                      console.error("CRITICAL: Profile found but ID is NULL/UNDEFINED", data);
+                  }
                   return;
+              } else {
+                   console.log("No profile data returned for this Telegram ID.");
               }
           }
 
@@ -187,11 +200,11 @@ const Courier = () => {
                                     Haritada ko'rish
                                 </button>
 
+
+
   const handleLogout = () => {
     if (confirm("Haqiqatan ham chiqmoqchimisiz?")) {
-        localStorage.removeItem('user');
-        localStorage.removeItem('dev_forced_role');
-        window.location.reload();
+        logout();
     }
   };
 

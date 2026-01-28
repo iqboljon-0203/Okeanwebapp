@@ -44,35 +44,45 @@ export const UserProvider = ({ children }) => {
                 .from('profiles')
                 .select('*')
                 .eq('telegram_id', tgUser.id)
-                .single();
+                .maybeSingle();
 
             let role = 'user';
 
             if (!existingProfile) {
-                const { data: newProfile } = await supabase.from('profiles').insert([{
+                const { data: newProfile, error: insertError } = await supabase.from('profiles').insert([{
                     telegram_id: tgUser.id,
                     full_name: fullName,
                     username: tgUser.username,
                     avatar_url: tgUser.photo_url
-                }]).select().single();
+                }]).select().maybeSingle();
                 
                 if (newProfile) {
                    existingProfile = newProfile;
+                } else if (insertError && insertError.code === '23505') {
+                    // Conflict: Profile already exists, fetch it
+                    const { data: retryProfile } = await supabase
+                        .from('profiles')
+                        .select('*')
+                        .eq('telegram_id', tgUser.id)
+                        .maybeSingle();
+                    existingProfile = retryProfile;
                 }
             } else {
                 role = existingProfile.role || 'user';
             }
 
-            setUser(prev => ({
-              ...prev,
-              id: existingProfile?.id, // Store UUID!
-              name: fullName,
-              username: tgUser.username,
-              telegramId: tgUser.id,
-              languageCode: tgUser.language_code,
-              avatarUrl: tgUser.photo_url || prev.avatarUrl || '',
-              role: role 
-            }));
+            if (existingProfile) {
+                setUser(prev => ({
+                ...prev,
+                id: existingProfile.id, // Store UUID!
+                name: fullName,
+                username: tgUser.username,
+                telegramId: tgUser.id,
+                languageCode: tgUser.language_code,
+                avatarUrl: tgUser.photo_url || prev.avatarUrl || '',
+                role: role 
+                }));
+            }
 
           } catch (err) {
             console.error("Supabase Profile Sync Error:", err);
@@ -93,41 +103,48 @@ export const UserProvider = ({ children }) => {
                     .from('profiles')
                     .select('*')
                     .eq('telegram_id', guestId)
-                    .single();
+                    .maybeSingle();
                 
                 let role = 'user';
                 if (!existingProfile) {
-                     const { data: newGuest } = await supabase.from('profiles').insert([{
+                     const { data: newGuest, error: insertError } = await supabase.from('profiles').insert([{
                         telegram_id: guestId,
                         full_name: 'Mehmon (Browser)',
                         username: 'guest_' + guestId,
                         avatar_url: ''
-                    }]).select().single();
-                    if (newGuest) existingProfile = newGuest;
+                    }]).select().maybeSingle();
+                    
+                    if (newGuest) {
+                        existingProfile = newGuest;
+                    } else if (insertError && insertError.code === '23505') {
+                         // Conflict: Profile already exists, fetch it
+                        const { data: retryProfile } = await supabase
+                            .from('profiles')
+                            .select('*')
+                            .eq('telegram_id', guestId)
+                            .maybeSingle();
+                        existingProfile = retryProfile;
+                    }
                 } else {
                     role = existingProfile.role || 'user';
                 }
 
-                setUser(prev => ({
-                    ...prev,
-                    id: existingProfile?.id, // Store UUID
-                    name: prev.name === 'Mehmon' ? 'Mehmon (Browser)' : prev.name,
-                    telegramId: guestId,
-                    role: role
-                }));
-
-                // DEV MODE OVERRIDE
-                if (import.meta.env.DEV) {
-                    const forcedRole = getStorageItem('dev_forced_role');
-                    if (forcedRole) {
-                        console.log("Dev Mode: Forcing role to", forcedRole);
-                        setUser(prev => ({ ...prev, role: forcedRole }));
-                    }
+                if (existingProfile) {
+                    setUser(prev => ({
+                        ...prev,
+                        id: existingProfile.id, // Store UUID
+                        name: prev.name === 'Mehmon' ? 'Mehmon (Browser)' : prev.name,
+                        telegramId: guestId,
+                        role: role
+                    }));
                 }
+
             } catch (err) {
                 console.error("Guest Profile Sync Error:", err);
             }
         }
+        
+
       } else {
          // Fallback if window.Telegram is totally missing (rare but possible in standard browsers)
           const guestId = getStorageItem('guest_id') || Math.floor(100000000 + Math.random() * 900000000);
@@ -163,9 +180,15 @@ export const UserProvider = ({ children }) => {
   };
 
   const logout = () => {
+    localStorage.removeItem('user');
+    localStorage.removeItem('guest_id');
+    localStorage.removeItem('favorites');
+    localStorage.removeItem('dev_forced_role');
+    
     if (window.Telegram?.WebApp) {
       window.Telegram.WebApp.close();
     } else {
+      window.location.replace('/'); // Go to home instead of just reload, though reload is fine too
       window.location.reload();
     }
   };

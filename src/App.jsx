@@ -6,20 +6,20 @@ import { ProductProvider } from './context/ProductContext';
 
 import { Toaster } from 'react-hot-toast';
 import MainLayout from './components/MainLayout';
-import DevRoleSwitcher from './components/DevRoleSwitcher';
+
 
 function App() {
   return (
     <UserProvider>
       <ProductProvider>
         <CartProvider>
-          <Router>
+          <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <div className="app-container">
               <Toaster position="top-center" reverseOrder={false} />
               <MainLayout>
                 <AppRouter />
               </MainLayout>
-              <DevRoleSwitcher />
+
             </div>
           </Router>
         </CartProvider>
