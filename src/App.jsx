@@ -6,6 +6,7 @@ import { ProductProvider } from './context/ProductContext';
 
 import { Toaster } from 'react-hot-toast';
 import MainLayout from './components/MainLayout';
+import DevRoleSwitcher from './components/DevRoleSwitcher';
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
               <MainLayout>
                 <AppRouter />
               </MainLayout>
+              <DevRoleSwitcher />
             </div>
           </Router>
         </CartProvider>

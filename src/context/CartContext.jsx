@@ -119,11 +119,63 @@ export const CartProvider = ({ children }) => {
 
         // Success
         clearCart();
+
+        // 3. Send Telegram Notification
+        await sendTelegramNotification({
+            id: order.id,
+            total: total,
+            address: address,
+            phone: phone,
+            lat: coords ? coords[0] : null,
+            lng: coords ? coords[1] : null
+        });
+
         return { success: true, orderId: order.id };
 
     } catch (error) {
         console.error('Order submission error:', error);
         return { success: false, message: error.message };
+    }
+  };
+
+  const sendTelegramNotification = async (orderData) => {
+    const BOT_TOKEN = import.meta.env.VITE_BOT_TOKEN;
+    const CHAT_ID = '-1003804421466'; 
+
+    if (!BOT_TOKEN) {
+        console.error('Telegran notification failed: VITE_BOT_TOKEN is missing');
+        return;
+    }
+
+    const message = `
+📦 <b>Yangi Buyurtma!</b> №${orderData.id}
+
+💰 <b>Narxi:</b> ${parseInt(orderData.total).toLocaleString()} so'm
+📞 <b>Tel:</b> ${orderData.phone}
+📍 <b>Manzil:</b> ${orderData.address || 'Belgilanmagan'}
+    `.trim();
+
+    const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+
+    try {
+        await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: CHAT_ID,
+                text: message,
+                parse_mode: 'HTML',
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            { text: "🚀 Qabul qilish", url: "https://okeanmarket.app/courier" }
+                        ]
+                    ]
+                }
+            })
+        });
+    } catch (error) {
+        console.error('Failed to send Telegram notification:', error);
     }
   };
 

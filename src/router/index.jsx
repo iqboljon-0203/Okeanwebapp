@@ -12,7 +12,9 @@ const Addresses = lazy(() => import('../pages/Addresses'));
 const Security = lazy(() => import('../pages/Security'));
 const Help = lazy(() => import('../pages/Help'));
 const Admin = lazy(() => import('../pages/Admin'));
+const Courier = lazy(() => import('../pages/Courier'));
 import ProtectedAdminRoute from '../components/ProtectedAdminRoute';
+import ProtectedCourierRoute from '../components/ProtectedCourierRoute';
 
 const AppRouter = () => {
   const location = useLocation();
@@ -44,6 +46,13 @@ const AppRouter = () => {
           <ProtectedAdminRoute>
             <Admin />
           </ProtectedAdminRoute>
+        } />
+
+        {/* Courier Route */}
+        <Route path="/courier" element={
+          <ProtectedCourierRoute>
+            <Courier />
+          </ProtectedCourierRoute>
         } />
 
         <Route path="*" element={<Home />} />

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { Package, Edit2, MapPin, Phone, Trash2, List, Settings, Upload, Loader2, Home, LayoutDashboard, ShoppingBag, Layers, Search, PlusCircle, X, Bell, ShoppingCart, AlertTriangle, CheckCircle, CheckCircle2, Truck, LogOut } from 'lucide-react';
+import { Package, Edit2, MapPin, Phone, Trash2, List, Settings, Upload, Loader2, Home, LayoutDashboard, ShoppingBag, Layers, Search, PlusCircle, X, Bell, ShoppingCart, AlertTriangle, CheckCircle, CheckCircle2, Truck, LogOut, Users } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useUser } from '../context/UserContext';
 
@@ -23,6 +23,7 @@ const Admin = () => {
     const [orders, setOrders] = useState([]);
     const [products, setProducts] = useState([]);
     const [categories, setCategories] = useState([]);
+    const [couriers, setCouriers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [uploading, setUploading] = useState(false);
     
@@ -73,7 +74,7 @@ const Admin = () => {
 
     const loadAllData = async () => {
         setLoading(true);
-        await Promise.all([fetchOrders(), fetchProducts(), fetchCategories()]);
+        await Promise.all([fetchOrders(), fetchProducts(), fetchCategories(), fetchCouriers()]);
         setLoading(false);
     };
 
@@ -111,6 +112,32 @@ const Admin = () => {
     const fetchCategories = async () => {
         const { data, error } = await supabase.from('categories').select('*').order('created_at', { ascending: true });
         if (!error) setCategories(data || []);
+    };
+
+    const fetchCouriers = async () => {
+        // 1. Get all users with role 'courier'
+        const { data: users, error } = await supabase.from('profiles').select('*').eq('role', 'courier');
+        if (error || !users) return;
+
+        // 2. Get all orders to calculate stats
+        const { data: allOrders } = await supabase.from('orders').select('id, courier_id, status');
+        
+        console.log('DEBUG: Couriers:', users);
+        console.log('DEBUG: Orders:', allOrders);
+
+        // 3. Match stats
+        const stats = users.map(user => {
+            // UUID ni ishlatamiz, chunki orders.courier_id uuid
+            const uid = user.id; 
+            const userOrders = allOrders.filter(o => o.courier_id && String(o.courier_id) === String(uid));
+            
+            return {
+                ...user,
+                accepted_count: userOrders.length,
+                delivered_count: userOrders.filter(o => o.status === 'delivered').length
+            };
+        });
+        setCouriers(stats);
     };
 
     // --- Image Upload Logic ---
@@ -401,30 +428,7 @@ const Admin = () => {
                         </div>
                         
                         <div className="order-actions-grid">
-                            {order.status === 'new' && (
-                                <>
-                                    <button 
-                                        onClick={() => handleUpdateStatus(order.id, 'canceled')} 
-                                        className="btn-action btn-cancel"
-                                    >
-                                        <X size={18} /> Bekor qilish
-                                    </button>
-                                    <button 
-                                        onClick={() => handleUpdateStatus(order.id, 'pending')} 
-                                        className="btn-action btn-accept"
-                                    >
-                                        <CheckCircle2 size={18} /> Qabul qilish
-                                    </button>
-                                </>
-                            )}
-                            {order.status === 'pending' && (
-                                <button 
-                                    onClick={() => handleUpdateStatus(order.id, 'delivered')} 
-                                    className="btn-action btn-delivered"
-                                >
-                                    <Truck size={18} /> Yetkazildi
-                                </button>
-                            )}
+                            {/* Admin only views status, no longer accepts orders */}
                             {order.status === 'delivered' && (
                                 <div className="status-done">
                                     <CheckCircle size={18} /> Muvaffaqiyatli yakunlandi
@@ -433,6 +437,12 @@ const Admin = () => {
                             {order.status === 'canceled' && (
                                 <div className="status-cancelled">
                                     <X size={18} /> Buyurtma bekor qilingan
+                                </div>
+                            )}
+                            {/* Show Info for active/new orders */}
+                            {(order.status === 'new' || order.status === 'pending') && (
+                                <div className="status-info text-center text-gray-400 font-bold p-3 bg-gray-50 rounded-xl">
+                                    {order.status === 'new' ? 'Kuryer kutilmoqda...' : 'Kuryer yetkazmoqda...'}
                                 </div>
                             )}
                         </div>
@@ -635,6 +645,59 @@ const Admin = () => {
         </div>
     );
 
+    const renderCouriers = () => (
+        <div className="couriers-list animate-up">
+             {couriers.length === 0 && <p className="empty-msg">Kuryerlar topilmadi</p>}
+             {couriers.map(courier => (
+                 <div key={courier.id} className="courier-card">
+                     <div className="c-avatar">
+                        <Users size={24} color="#fff" />
+                     </div>
+                     <div className="c-info">
+                         <h4>{courier.first_name || 'Kuryer'} {courier.last_name || ''}</h4>
+                         <p>{courier.phone_number || 'Tel raqam yo\'q'}</p>
+                     </div>
+                     <div className="c-stats">
+                         <div className="c-stat-box">
+                             <span className="lbl">Qabul</span>
+                             <span className="val">{courier.accepted_count}</span>
+                         </div>
+                         <div className="c-stat-box green">
+                             <span className="lbl">Yetkazdi</span>
+                             <span className="val">{courier.delivered_count}</span>
+                         </div>
+                     </div>
+                 </div>
+             ))}
+             
+             <style>{`
+                .courier-card {
+                    background: #fff; padding: 15px; border-radius: 18px;
+                    display: flex; align-items: center; gap: 15px; margin-bottom: 12px;
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+                }
+                .c-avatar {
+                    width: 50px; height: 50px; background: #00302D; border-radius: 50%;
+                    display: flex; align-items: center; justify-content: center;
+                }
+                .c-info { flex: 1; }
+                .c-info h4 { font-size: 16px; font-weight: 700; color: #2d3436; margin: 0; }
+                .c-info p { font-size: 13px; color: #636e72; margin: 2px 0 0 0; }
+                
+                .c-stats { display: flex; gap: 10px; }
+                .c-stat-box {
+                    background: #f8f9fa; padding: 6px 12px; border-radius: 10px;
+                    display: flex; flex-direction: column; align-items: center; min-width: 60px;
+                }
+                .c-stat-box.green { background: #e8f5e9; }
+                .c-stat-box.green .val { color: #00b894; }
+                
+                .c-stat-box .lbl { font-size: 10px; font-weight: 700; color: #b2bec3; text-transform: uppercase; }
+                .c-stat-box .val { font-size: 16px; font-weight: 800; color: #2d3436; }
+             `}</style>
+        </div>
+    );
+
     const renderNotifications = () => {
         // Derive notifications from orders and products
         const orderNotifs = orders.map(o => ({
@@ -717,7 +780,10 @@ const Admin = () => {
                  <h2>{activeTab === 'dashboard' ? 'Umumiy hisobot' :
                      activeTab === 'orders' ? 'Buyurtmalar' :
                      activeTab === 'products' ? 'Mahsulotlar' : 
-                     activeTab === 'categories' ? 'Kategoriyalar' : 'Bildirishnomalar'}
+                     activeTab === 'orders' ? 'Buyurtmalar' :
+                     activeTab === 'products' ? 'Mahsulotlar' : 
+                     activeTab === 'categories' ? 'Kategoriyalar' : 
+                     activeTab === 'couriers' ? 'Kuryerlar Statistkasi' : 'Bildirishnomalar'}
                 </h2>
             </div>
 
@@ -726,6 +792,7 @@ const Admin = () => {
                 {activeTab === 'orders' && renderOrders()}
                 {activeTab === 'products' && renderProducts()}
                 {activeTab === 'categories' && renderCategories()}
+                {activeTab === 'couriers' && renderCouriers()}
                 {activeTab === 'notifications' && renderNotifications()}
             </div>
 
@@ -760,6 +827,13 @@ const Admin = () => {
                 >
                     <Layers size={24} />
                     <span>Katalog</span>
+                </button>
+                <button 
+                    className={`nav-item ${activeTab === 'couriers' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('couriers')}
+                >
+                    <Users size={24} />
+                    <span>Kuryerlar</span>
                 </button>
             </div>
 

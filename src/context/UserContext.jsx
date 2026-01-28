@@ -11,7 +11,7 @@ export const UserProvider = ({ children }) => {
     address: '',
     avatarUrl: '',
     telegramId: null,
-    role: 'user'
+    role: import.meta.env.DEV ? 'courier' : 'user' // Auto-courier in Dev
   }));
   
   const [favorites, setFavorites] = useState(() => getStorageItem('favorites', []));
@@ -40,7 +40,7 @@ export const UserProvider = ({ children }) => {
           
           // Sync with Supabase (Telegram User)
           try {
-            const { data: existingProfile } = await supabase
+            let { data: existingProfile } = await supabase
                 .from('profiles')
                 .select('*')
                 .eq('telegram_id', tgUser.id)
@@ -49,18 +49,23 @@ export const UserProvider = ({ children }) => {
             let role = 'user';
 
             if (!existingProfile) {
-                await supabase.from('profiles').insert([{
+                const { data: newProfile } = await supabase.from('profiles').insert([{
                     telegram_id: tgUser.id,
                     full_name: fullName,
                     username: tgUser.username,
                     avatar_url: tgUser.photo_url
-                }]);
+                }]).select().single();
+                
+                if (newProfile) {
+                   existingProfile = newProfile;
+                }
             } else {
                 role = existingProfile.role || 'user';
             }
 
             setUser(prev => ({
               ...prev,
+              id: existingProfile?.id, // Store UUID!
               name: fullName,
               username: tgUser.username,
               telegramId: tgUser.id,
@@ -84,7 +89,7 @@ export const UserProvider = ({ children }) => {
 
             // Ensure profile exists for Guest
             try {
-                const { data: existingProfile } = await supabase
+                let { data: existingProfile } = await supabase
                     .from('profiles')
                     .select('*')
                     .eq('telegram_id', guestId)
@@ -92,22 +97,33 @@ export const UserProvider = ({ children }) => {
                 
                 let role = 'user';
                 if (!existingProfile) {
-                     await supabase.from('profiles').insert([{
+                     const { data: newGuest } = await supabase.from('profiles').insert([{
                         telegram_id: guestId,
                         full_name: 'Mehmon (Browser)',
                         username: 'guest_' + guestId,
                         avatar_url: ''
-                    }]);
+                    }]).select().single();
+                    if (newGuest) existingProfile = newGuest;
                 } else {
                     role = existingProfile.role || 'user';
                 }
 
                 setUser(prev => ({
                     ...prev,
+                    id: existingProfile?.id, // Store UUID
                     name: prev.name === 'Mehmon' ? 'Mehmon (Browser)' : prev.name,
                     telegramId: guestId,
                     role: role
                 }));
+
+                // DEV MODE OVERRIDE
+                if (import.meta.env.DEV) {
+                    const forcedRole = getStorageItem('dev_forced_role');
+                    if (forcedRole) {
+                        console.log("Dev Mode: Forcing role to", forcedRole);
+                        setUser(prev => ({ ...prev, role: forcedRole }));
+                    }
+                }
             } catch (err) {
                 console.error("Guest Profile Sync Error:", err);
             }
