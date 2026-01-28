@@ -21,11 +21,11 @@ export const CartProvider = ({ children }) => {
     setCartItems(prev => {
       const existing = prev.find(item => item.product.id === product.id);
       if (existing) {
-        const step = product.step || 1;
+        const step = Number(product.step) || 1; 
         toast.success(`${product.name} miqdori oshirildi`);
         return prev.map(item => 
           item.product.id === product.id 
-            ? { ...item, quantity: item.quantity + step } 
+            ? { ...item, product: product, quantity: Number(item.quantity) + step } // Update product ref & force number
             : item
         );
       }
@@ -42,8 +42,10 @@ export const CartProvider = ({ children }) => {
   const increaseQty = (productId) => {
     setCartItems(prev => prev.map(item => {
       if (item.product.id === productId) {
-        const step = item.product.step || 1;
-        return { ...item, quantity: item.quantity + step };
+        const step = Number(item.product.step) || 1;
+        console.log(`Increasing qty for ${item.product.name}. Step: ${step}, Current: ${item.quantity}`);
+        if (step > 1) toast(`Qadam: ${step}`); 
+        return { ...item, quantity: Number(item.quantity) + step };
       }
       return item;
     }));
@@ -52,8 +54,8 @@ export const CartProvider = ({ children }) => {
   const decreaseQty = (productId) => {
     setCartItems(prev => prev.map(item => {
       if (item.product.id === productId) {
-        const step = item.product.step || 1;
-        const newQty = item.quantity - step;
+        const step = Number(item.product.step) || 1;
+        const newQty = Number(item.quantity) - step;
         return { ...item, quantity: newQty < step ? step : newQty };
       }
       return item;
