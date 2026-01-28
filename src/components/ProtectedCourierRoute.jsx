@@ -3,11 +3,18 @@ import { Navigate, Outlet } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
 
 const ProtectedCourierRoute = ({ children }) => {
-  const { user } = useUser();
+  const { user, isLoading } = useUser();
 
-  // If user is not yet loaded or not strictly a courier, redirect.
-  // Note: Optimally we would have a loading state, but following the pattern in ProtectedAdminRoute:
-  
+  if (isLoading) {
+    return (
+        <div style={{height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+            <div className="loader-logo">
+                <span style={{fontSize: '24px', fontWeight: '800', color: '#FF4B3A'}}>OKEAN</span>
+            </div>
+        </div>
+    );
+  }
+
   // DEV MODE BYPASS: Allow access if in dev mode
   if (import.meta.env.DEV) {
     return children ? children : <Outlet />;
