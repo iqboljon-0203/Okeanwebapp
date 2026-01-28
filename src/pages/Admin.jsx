@@ -655,7 +655,9 @@ const Admin = () => {
                      </div>
                      <div className="c-info">
                          <h4>{courier.full_name || courier.name || 'Kuryer'}</h4>
-                         <p>{courier.phone_number || 'Tel raqam yo\'q'}</p>
+                         <p className="courier-username">
+                            {courier.username ? `@${courier.username}` : (courier.phone_number || 'Username yo\'q')}
+                         </p>
                      </div>
                      <div className="c-stats">
                          <div className="c-stat-box">
@@ -683,6 +685,7 @@ const Admin = () => {
                 .c-info { flex: 1; }
                 .c-info h4 { font-size: 16px; font-weight: 700; color: #2d3436; margin: 0; }
                 .c-info p { font-size: 13px; color: #636e72; margin: 2px 0 0 0; }
+                .c-info .courier-username { color: #0088cc; font-weight: 500; }
                 
                 .c-stats { display: flex; gap: 10px; }
                 .c-stat-box {

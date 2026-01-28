@@ -3,11 +3,17 @@ import { Navigate, Outlet } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
 
 const ProtectedAdminRoute = ({ children }) => {
-  const { user } = useUser();
+  const { user, isLoading } = useUser();
 
-  // If user data isn't fully loaded yet (e.g. initial 'Mehmon' state before Telegram sync), 
-  // you might want a loading state. But for now, we check the role.
-  // Assuming 'user' defaults to 'user' role or null.
+  if (isLoading) {
+    return (
+        <div style={{height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+            <div className="loader-logo">
+                <span style={{fontSize: '24px', fontWeight: '800', color: '#FF4B3A'}}>OKEAN</span>
+            </div>
+        </div>
+    );
+  }
   
   if (user?.role !== 'admin') {
     console.warn("ProtectedAdminRoute: Access Denied. Role is:", user?.role);

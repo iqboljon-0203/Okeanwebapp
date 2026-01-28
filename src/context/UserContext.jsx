@@ -14,7 +14,9 @@ export const UserProvider = ({ children }) => {
     role: import.meta.env.DEV ? 'courier' : 'user' // Auto-courier in Dev
   }));
   
+  
   const [favorites, setFavorites] = useState(() => getStorageItem('favorites', []));
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const initUser = async () => {
@@ -36,6 +38,9 @@ export const UserProvider = ({ children }) => {
         const tgUser = tg.initDataUnsafe?.user;
 
         if (tgUser) {
+          console.log("TG User Data detected:", tgUser);
+          if (!tgUser.photo_url) console.warn("TG User has no photo_url property. Check privacy settings.");
+
           const fullName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ');
           
           // Sync with Supabase (Telegram User)
@@ -45,6 +50,8 @@ export const UserProvider = ({ children }) => {
                 .select('*')
                 .eq('telegram_id', tgUser.id)
                 .maybeSingle();
+
+            console.log("DB Existing Profile:", existingProfile);
 
             let role = 'user';
 
@@ -72,6 +79,7 @@ export const UserProvider = ({ children }) => {
                 
                 // Check if we need to update avatar or name if changed in Telegram
                 const updates = {};
+                // Only update avatar from TG if TG *has* a photo
                 if (tgUser.photo_url && tgUser.photo_url !== existingProfile.avatar_url) {
                     updates.avatar_url = tgUser.photo_url;
                 }
@@ -93,6 +101,7 @@ export const UserProvider = ({ children }) => {
             }
 
             if (existingProfile) {
+                console.log("Final Profile Data to State:", existingProfile);
                 setUser(prev => ({
                 ...prev,
                 id: existingProfile.id, // Store UUID!
@@ -100,7 +109,8 @@ export const UserProvider = ({ children }) => {
                 username: existingProfile.username || tgUser.username,
                 telegramId: tgUser.id,
                 languageCode: tgUser.language_code,
-                avatarUrl: tgUser.photo_url || existingProfile.avatar_url || prev.avatarUrl || '',
+                // Prioritize DB avatar (which should be synced with TG if available), then TG, then prev
+                avatarUrl: existingProfile.avatar_url || tgUser.photo_url || prev.avatarUrl || '',
                 role: role 
                 }));
             }
@@ -166,6 +176,7 @@ export const UserProvider = ({ children }) => {
             }
         }
         
+        setIsLoading(false);
 
       } else {
          // Fallback if window.Telegram is totally missing (rare but possible in standard browsers)
@@ -173,6 +184,7 @@ export const UserProvider = ({ children }) => {
           if (!getStorageItem('guest_id')) setStorageItem('guest_id', guestId);
           
           setUser(prev => ({ ...prev, telegramId: guestId }));
+          setIsLoading(false);
       }
     };
 
@@ -218,6 +230,7 @@ export const UserProvider = ({ children }) => {
   return (
     <UserContext.Provider value={{
       user,
+      isLoading,
       updateProfile,
       favorites,
       toggleFavorite,

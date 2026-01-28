@@ -142,8 +142,11 @@ export const CartProvider = ({ children }) => {
     const BOT_TOKEN = import.meta.env.VITE_BOT_TOKEN;
     const CHAT_ID = '-1003804421466'; 
 
+    console.log("Attempting to send TG notification...");
+    
     if (!BOT_TOKEN) {
-        console.error('Telegran notification failed: VITE_BOT_TOKEN is missing');
+        console.error('Telegram notification failed: VITE_BOT_TOKEN is missing');
+        toast.error('Telegram bot tokeni topilmadi!');
         return;
     }
 
@@ -155,10 +158,12 @@ export const CartProvider = ({ children }) => {
 📍 <b>Manzil:</b> ${orderData.address || 'Belgilanmagan'}
     `.trim();
 
-    const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+    const isDev = import.meta.env.DEV;
+    const baseUrl = isDev ? '/telegram-api' : 'https://api.telegram.org';
+    const url = `${baseUrl}/bot${BOT_TOKEN}/sendMessage`;
 
     try {
-        await fetch(url, {
+        const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -168,14 +173,24 @@ export const CartProvider = ({ children }) => {
                 reply_markup: {
                     inline_keyboard: [
                         [
-                            { text: "🚀 Qabul qilish", url: "https://okeanmarket.app/courier" }
+                            { text: "🚀 Qabul qilish", url: "https://t.me/okean_delivery_bot/courier" }
                         ]
                     ]
                 }
             })
         });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('Telegram API Error:', errorData);
+            throw new Error(errorData.description || 'Telegram API xatosi');
+        }
+        
+        console.log("TG Notification sent successfully");
+
     } catch (error) {
         console.error('Failed to send Telegram notification:', error);
+        toast.error('Guruhga xabar yuborilmadi: ' + error.message);
     }
   };
 
