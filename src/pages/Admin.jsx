@@ -245,10 +245,18 @@ const Admin = () => {
     // --- Product Logic ---
     const handleProductSubmit = async (e) => {
         e.preventDefault();
+        
+        const originalPrice = parseFloat(productForm.price);
+        const discountAmount = productForm.discount_price ? parseFloat(productForm.discount_price) : 0;
+        
+        // Agar chegirma kiritilgan bo'lsa, asl narxdan ayiramiz
+        // Eslatma: Bazaga 'discount_price' ustuniga yakuniy chegirmali narx yoziladi
+        const finalPrice = discountAmount > 0 ? (originalPrice - discountAmount) : null;
+
         const payload = { 
             ...productForm,
-            price: parseFloat(productForm.price),
-            discount_price: productForm.discount_price ? parseFloat(productForm.discount_price) : null,
+            price: originalPrice,
+            discount_price: finalPrice, // Bazaga hisoblangan narx ketadi
             stock: parseInt(productForm.stock),
             step: parseFloat(productForm.step)
         };
@@ -275,8 +283,13 @@ const Admin = () => {
 
     const editProduct = (p) => {
         setEditingProduct(p);
+        
+        // Chegirma summasini qayta hisoblash: Asl narx - Hozirgi narx
+        const discountAmount = p.discount_price ? (p.price - p.discount_price) : '';
+        
         setProductForm({
-            name: p.name, price: p.price, discount_price: p.discount_price || '',
+            name: p.name, price: p.price, 
+            discount_price: discountAmount, // Formaga faqat chegirma miqdorini qo'yamiz
             category_id: p.category_id, image_url: p.image_url,
             stock: p.stock, unit: p.unit, step: p.step, is_popular: p.is_popular
         });
@@ -499,7 +512,7 @@ const Admin = () => {
                             <div className="form-grid three-cols">
                                 <input type="number" placeholder="Narxi" value={productForm.price} 
                                     onChange={e => setProductForm({...productForm, price: e.target.value})} required />
-                                <input type="number" placeholder="Chegirma" value={productForm.discount_price} 
+                                <input type="number" placeholder="Chegirma summasi (ayriladi)" value={productForm.discount_price} 
                                     onChange={e => setProductForm({...productForm, discount_price: e.target.value})} />
                                 <input type="number" placeholder="Ombor" value={productForm.stock} 
                                     onChange={e => setProductForm({...productForm, stock: e.target.value})} />
@@ -561,8 +574,18 @@ const Admin = () => {
                         <div className="p-info">
                             <h4>{p.name}</h4>
                             <p className="price">
-                                {parseInt(p.price).toLocaleString()} 
-                                {p.discount_price && <span className="discount">({parseInt(p.discount_price).toLocaleString()})</span>}
+                                {p.discount_price ? (
+                                    <>
+                                        <span style={{ textDecoration: 'line-through', color: '#999', fontSize: '13px', marginRight: '6px' }}>
+                                            {parseInt(p.price).toLocaleString()}
+                                        </span>
+                                        <span style={{ color: '#e74c3c', fontWeight: 'bold' }}>
+                                            {parseInt(p.discount_price).toLocaleString()}
+                                        </span>
+                                    </>
+                                ) : (
+                                    parseInt(p.price).toLocaleString()
+                                )}
                             </p>
                             <span className="badge-sm">{categories.find(c => c.id === p.category_id)?.name || p.category_id}</span>
                         </div>
