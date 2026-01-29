@@ -72,10 +72,7 @@ export const CartProvider = ({ children }) => {
       return acc + (price * item.quantity);
     }, 0);
     
-    // DELIVERY LOGIC:
-    // < 100,000 = 15,000 fee
-    // >= 100,000 = Free
-    const deliveryFee = (subtotal >= 100000 || subtotal === 0) ? 0 : 15000;
+    const deliveryFee = 0;
     const total = subtotal + deliveryFee;
     
     return { subtotal, deliveryFee, total, count: cartItems.length };

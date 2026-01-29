@@ -286,9 +286,17 @@ const Admin = () => {
     const deleteProduct = async (id) => {
         if(!window.confirm('O\'chirishni xohlaysizmi?')) return;
         const { error } = await supabase.from('products').delete().eq('id', id);
+        
         if(!error) {
             setProducts(products.filter(p => p.id !== id));
             toast.success('O\'chirildi');
+        } else {
+            console.error("Delete Error:", error);
+            if (error.code === '23503') {
+                toast.error("Bu mahsulot buyurtmalarda qatnashganligi uchun o'chirib bo'lmaydi!");
+            } else {
+                toast.error('Xatolik: ' + error.message);
+            }
         }
     };
 
