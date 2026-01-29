@@ -17,8 +17,12 @@ export const UserProvider = ({ children }) => {
   
   const [favorites, setFavorites] = useState(() => getStorageItem('favorites', []));
   const [isLoading, setIsLoading] = useState(true);
+  const initialized = React.useRef(false);
 
   useEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
+
     const initUser = async () => {
       console.log("initUser started");
       // Initialize Telegram Web App

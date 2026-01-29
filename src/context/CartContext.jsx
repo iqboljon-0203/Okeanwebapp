@@ -137,14 +137,17 @@ export const CartProvider = ({ children }) => {
     }
   };
 
-  const sendTelegramNotification = async (orderData) => {
-    const BOT_TOKEN = import.meta.env.VITE_BOT_TOKEN;
+    const sendTelegramNotification = async (orderData) => {
+    // 1. Tokenni olishga harakat qilamiz (Env yoki Hardcode)
+    const envToken = import.meta.env.VITE_BOT_TOKEN;
+    const BOT_TOKEN = envToken || '8503195199:AAFnjXFzYIMGxTA3TK6yu0erWZFwsIhOeZE'; 
     const CHAT_ID = '-1003804421466'; 
 
-    console.log("Attempting to send TG notification...");
-    
+    console.log("TG Notification Start.");
+    console.log("Token check:", envToken ? "Found in ENV" : "Using Fallback");
+
     if (!BOT_TOKEN) {
-        console.error('Telegram notification failed: VITE_BOT_TOKEN is missing');
+        console.error('Telegram notification failed: Token is completely missing');
         toast.error('Telegram bot tokeni topilmadi!');
         return;
     }
@@ -157,27 +160,48 @@ export const CartProvider = ({ children }) => {
 📍 <b>Manzil:</b> ${orderData.address || 'Belgilanmagan'}
     `.trim();
 
-    const isDev = import.meta.env.DEV;
-    const baseUrl = isDev ? '/telegram-api' : 'https://api.telegram.org';
-    const url = `${baseUrl}/bot${BOT_TOKEN}/sendMessage`;
-
+    // 4. Send Request
     try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                chat_id: CHAT_ID,
-                text: message,
-                parse_mode: 'HTML',
-                reply_markup: {
-                    inline_keyboard: [
-                        [
-                            { text: "🚀 Qabul qilish", url: "https://t.me/okean_delivery_bot/courier" }
+        let response;
+        const isDev = import.meta.env.DEV;
+
+        if (isDev) {
+            // Local Development: Use Vite Proxy
+            // URL: /telegram-api/bot<TOKEN>/sendMessage
+            const baseUrl = '/telegram-api';
+            const url = `${baseUrl}/bot${BOT_TOKEN}/sendMessage`;
+            
+            response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: CHAT_ID,
+                    text: message,
+                    parse_mode: 'HTML',
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{ text: "🚀 Qabul qilish", url: "https://t.me/okean_delivery_bot/courier" }]
                         ]
-                    ]
-                }
-            })
-        });
+                    }
+                })
+            });
+        } else {
+            // Production (Vercel): Use Serverless Function
+            // URL: /api/telegram (No token needed in URL, handled by server)
+            response = await fetch('/api/telegram', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: CHAT_ID,
+                    text: message,
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{ text: "🚀 Qabul qilish", url: "https://t.me/okean_delivery_bot/courier" }]
+                        ]
+                    }
+                })
+            });
+        }
 
         if (!response.ok) {
             const errorData = await response.json();
@@ -185,7 +209,8 @@ export const CartProvider = ({ children }) => {
             throw new Error(errorData.description || 'Telegram API xatosi');
         }
         
-        console.log("TG Notification sent successfully");
+        const resData = await response.json();
+        console.log("TG Notification sent successfully. Result:", resData);
 
     } catch (error) {
         console.error('Failed to send Telegram notification:', error);
