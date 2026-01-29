@@ -43,7 +43,14 @@ const ProductCard = ({ product, viewMode = 'grid' }) => {
       <div className="info">
         <h3 className="name">{product.name}</h3>
         <div className="price-row">
-          <span className="current-price">{formatPrice(price)}</span>
+          {product.discountPrice ? (
+             <div className="discount-block">
+                <span className="original-price-crossed">{formatPrice(product.price)}</span>
+                <span className="current-price discount">{formatPrice(product.discountPrice)}</span>
+             </div>
+          ) : (
+             <span className="current-price">{formatPrice(product.price)}</span>
+          )}
           <span className="unit">/ {product.unit}</span>
         </div>
         
