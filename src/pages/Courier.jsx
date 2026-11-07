@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
 import { fetchAvailableOrders, acceptOrder, fetchMyActiveOrder, completeOrder, fetchCourierHistory } from '../api/courier.api';
+import { notifyTelegramGroup } from '../utils/telegramNotify';
 import { 
   Package, CheckCircle, Navigation, Phone, 
   MapPin, RefreshCw, ArrowRight, User, 
@@ -146,6 +147,16 @@ const Courier = () => {
       }
       await acceptOrder(orderId, courierId);
       toast.success('Buyurtma qabul qilindi!');
+
+      // Telegram guruhiga va adminga xabar yuborish
+      const courierName = user.name || user.username || 'Kuryer';
+      const acceptMsg = `🛵 <b>Buyurtma kuryer tomonidan qabul qilindi!</b>\n\n` +
+                        `🆔 <b>Buyurtma:</b> №${orderId}\n` +
+                        `👤 <b>Kuryer:</b> ${courierName}\n` +
+                        `⏱ <b>Qabul qilingan vaqt:</b> ${new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })}\n` +
+                        `📍 <b>Holat:</b> Yetkazilmoqda...`;
+      notifyTelegramGroup(acceptMsg);
+
       await loadData();
     } catch (err) {
       toast.error('Buyurtmani qabul qilib bo\'lmadi');
@@ -161,6 +172,15 @@ const Courier = () => {
     try {
       await completeOrder(orderId);
       toast.success('Buyurtma yopildi ✅');
+
+      // Telegram guruhiga yakunlanganlik haqida xabar yuborish
+      const courierName = user.name || user.username || 'Kuryer';
+      const doneMsg = `✅ <b>Buyurtma muvaffaqiyatli yetkazildi!</b>\n\n` +
+                      `🆔 <b>Buyurtma:</b> №${orderId}\n` +
+                      `👤 <b>Kuryer:</b> ${courierName}\n` +
+                      `⏱ <b>Yetkazilgan vaqt:</b> ${new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })}`;
+      notifyTelegramGroup(doneMsg);
+
       setActiveOrder(null);
       setActiveTab('pool');
       await loadData();

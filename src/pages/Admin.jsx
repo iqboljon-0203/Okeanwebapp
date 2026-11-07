@@ -20,6 +20,7 @@ const Admin = () => {
     };
 
     const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' | 'orders' | 'products' | 'categories' | 'notifications'
+    const [orderFilter, setOrderFilter] = useState('all'); // 'all' | 'new' | 'pending' | 'delivered'
     const [orders, setOrders] = useState([]);
     const [products, setProducts] = useState([]);
     const [categories, setCategories] = useState([]);
@@ -55,11 +56,26 @@ const Admin = () => {
 
         const ordersSubscription = supabase
             .channel('public:orders')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
-                setOrders(prev => [payload.new, ...prev]);
-                // Re-calculate stats efficiently or just refetch
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload) => {
+                // Yangi yoki o'zgargan buyurtmani darhol qayta yuklaymiz
                 fetchOrders(); 
-                toast.success('Yangi buyurtma keldi!');
+                fetchCouriers();
+
+                if (payload.eventType === 'INSERT') {
+                    toast.success(`Yangi buyurtma keldi! (№${payload.new.id})`);
+                } else if (payload.eventType === 'UPDATE') {
+                    if (payload.new.status === 'pending') {
+                        toast(`🛵 №${payload.new.id} buyurtmani kuryer qabul qildi!`, {
+                            icon: '🛵',
+                            duration: 5000,
+                            style: { background: '#FFF3CD', color: '#856404', fontWeight: 'bold' }
+                        });
+                    } else if (payload.new.status === 'delivered') {
+                        toast.success(`✅ №${payload.new.id} buyurtma yetkazildi!`);
+                    } else if (payload.new.status === 'canceled') {
+                        toast.error(`❌ №${payload.new.id} buyurtma bekor qilindi`);
+                    }
+                }
             })
             .subscribe();
 
@@ -99,7 +115,7 @@ const Admin = () => {
     const fetchOrders = async () => {
         const { data, error } = await supabase
             .from('orders')
-            .select('*, order_items(*, product:products(name))')
+            .select('*, order_items(*, product:products(name, unit)), courier:profiles!orders_courier_id_fkey(full_name, username)')
             .order('created_at', { ascending: false });
         if (!error) setOrders(data || []);
     };
@@ -395,83 +411,144 @@ const Admin = () => {
         </div>
     );
 
-    const renderOrders = () => (
-        <div className="orders-list animate-up">
-            {orders.length === 0 && <p className="empty-msg">Buyurtmalar yo'q</p>}
-            {orders.map(order => (
-                <div key={order.id} className={`order-card status-${order.status}`}>
-                    <div className="order-header">
-                        <div className="o-info">
-                            <span className="order-id">№{order.id}</span>
-                            <span className="order-date">{new Date(order.created_at).toLocaleString()}</span>
-                        </div>
-                        <span className={`status-badge ${order.status}`}>
-                            {order.status === 'new' ? 'Yangi' : 
-                             order.status === 'pending' ? 'Tayyorlanmoqda' : 
-                             order.status === 'delivered' ? 'Yetkazildi' : 
-                             order.status === 'canceled' ? 'Bekor qilindi' : order.status}
-                        </span>
-                    </div>
-                    <div className="customer-info">
-                        <div className="info-row">
-                            <Phone size={16} color="var(--primary)" />
-                            <a href={`tel:${order.phone}`} className="phone-link">{order.phone}</a>
-                        </div>
-                        <div className="info-row">
-                            <MapPin size={16} color="var(--primary)" />
-                            <span>{order.address_text}</span>
-                        </div>
-                        {order.location_lat && (
-                            <a 
-                                href={`https://yandex.com/maps/?pt=${order.location_long},${order.location_lat}&z=18&l=map`} 
-                                target="_blank" rel="noopener noreferrer" className="map-link-btn"
-                            >
-                                <MapPin size={14} /> Xaritada ko'rish
-                            </a>
-                        )}
-                    </div>
-                    <div className="order-items">
-                        {order.order_items?.map((item, idx) => (
-                            <div key={idx} className="order-item">
-                                <span className="item-name">{item.product?.name}</span>
-                                <div className="item-meta">
-                                    <span className="qty">{item.quantity} {item.product?.unit || 'dona'}</span>
-                                    <span className="price">x {parseInt(item.price_at_time).toLocaleString()}</span>
+    const renderOrders = () => {
+        const filtered = orderFilter === 'all' 
+            ? orders 
+            : orders.filter(o => o.status === orderFilter);
+
+        const counts = {
+            all: orders.length,
+            new: orders.filter(o => o.status === 'new').length,
+            pending: orders.filter(o => o.status === 'pending').length,
+            delivered: orders.filter(o => o.status === 'delivered').length,
+        };
+
+        return (
+            <div className="orders-wrapper animate-up">
+                <div className="order-filter-tabs">
+                    <button 
+                        className={`filter-tab ${orderFilter === 'all' ? 'active' : ''}`}
+                        onClick={() => setOrderFilter('all')}
+                    >
+                        Barchasi ({counts.all})
+                    </button>
+                    <button 
+                        className={`filter-tab ${orderFilter === 'new' ? 'active' : ''}`}
+                        onClick={() => setOrderFilter('new')}
+                    >
+                        Yangi ({counts.new})
+                    </button>
+                    <button 
+                        className={`filter-tab tab-pending ${orderFilter === 'pending' ? 'active' : ''}`}
+                        onClick={() => setOrderFilter('pending')}
+                    >
+                        🛵 Kuryerda ({counts.pending})
+                    </button>
+                    <button 
+                        className={`filter-tab ${orderFilter === 'delivered' ? 'active' : ''}`}
+                        onClick={() => setOrderFilter('delivered')}
+                    >
+                        Yetkazildi ({counts.delivered})
+                    </button>
+                </div>
+
+                <div className="orders-list">
+                    {filtered.length === 0 && <p className="empty-msg">Buyurtmalar topilmadi</p>}
+                    {filtered.map(order => (
+                        <div key={order.id} className={`order-card status-${order.status}`}>
+                            <div className="order-header">
+                                <div className="o-info">
+                                    <span className="order-id">№{order.id}</span>
+                                    <span className="order-date">{new Date(order.created_at).toLocaleString()}</span>
+                                </div>
+                                <span className={`status-badge ${order.status}`}>
+                                    {order.status === 'new' ? 'Yangi' : 
+                                     order.status === 'pending' ? '🛵 Kuryerda' : 
+                                     order.status === 'delivered' ? 'Yetkazildi' : 
+                                     order.status === 'canceled' ? 'Bekor qilindi' : order.status}
+                                </span>
+                            </div>
+                            <div className="customer-info">
+                                <div className="info-row">
+                                    <Phone size={16} color="var(--primary)" />
+                                    <a href={`tel:${order.phone}`} className="phone-link">{order.phone}</a>
+                                </div>
+                                <div className="info-row">
+                                    <MapPin size={16} color="var(--primary)" />
+                                    <span>{order.address_text}</span>
+                                </div>
+                                {order.location_lat && (
+                                    <a 
+                                        href={`https://yandex.com/maps/?pt=${order.location_long},${order.location_lat}&z=18&l=map`} 
+                                        target="_blank" rel="noopener noreferrer" className="map-link-btn"
+                                    >
+                                        <MapPin size={14} /> Xaritada ko'rish
+                                    </a>
+                                )}
+                            </div>
+
+                            {/* KURYER MA'LUMOTLARI (Agar kuryer qabul qilgan bo'lsa) */}
+                            {order.courier && (
+                                <div className="courier-badge-box">
+                                    <div className="courier-badge-title">
+                                        <Truck size={16} color="#e67e22" />
+                                        <span><b>Kuryer:</b> {order.courier.full_name || order.courier.username}</span>
+                                    </div>
+                                    {order.accepted_at && (
+                                        <div className="courier-badge-time">
+                                            ⏱ Qabul qilingan: {new Date(order.accepted_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ({new Date(order.accepted_at).toLocaleDateString()})
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            <div className="order-items">
+                                {order.order_items?.map((item, idx) => (
+                                    <div key={idx} className="order-item">
+                                        <span className="item-name">{item.product?.name}</span>
+                                        <div className="item-meta">
+                                            <span className="qty">{item.quantity} {item.product?.unit || 'dona'}</span>
+                                            <span className="price">x {parseInt(item.price_at_time).toLocaleString()}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            
+                            <div className="order-footer">
+                                <div className="total-box">
+                                    <span>Jami:</span>
+                                    <span className="amount">{parseInt(order.total_price).toLocaleString()} so'm</span>
+                                </div>
+                                
+                                <div className="order-actions-grid">
+                                    {order.status === 'delivered' && (
+                                        <div className="status-done">
+                                            <CheckCircle size={18} /> Muvaffaqiyatli yetkazildi {order.courier ? `(${order.courier.full_name || order.courier.username})` : ''}
+                                        </div>
+                                    )}
+                                    {order.status === 'canceled' && (
+                                        <div className="status-cancelled">
+                                            <X size={18} /> Buyurtma bekor qilingan
+                                        </div>
+                                    )}
+                                    {order.status === 'new' && (
+                                        <div className="status-info text-center text-gray-400 font-bold p-3 bg-gray-50 rounded-xl">
+                                            ⏳ Kuryer qabul qilishi kutilmoqda...
+                                        </div>
+                                    )}
+                                    {order.status === 'pending' && (
+                                        <div className="status-pending-info">
+                                            <Truck size={18} /> Kuryer yetkazmoqda: <b>{order.courier?.full_name || order.courier?.username || 'Kuryer'}</b>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
-                        ))}
-                    </div>
-                    
-                    <div className="order-footer">
-                        <div className="total-box">
-                            <span>Jami:</span>
-                            <span className="amount">{parseInt(order.total_price).toLocaleString()} so'm</span>
                         </div>
-                        
-                        <div className="order-actions-grid">
-                            {/* Admin only views status, no longer accepts orders */}
-                            {order.status === 'delivered' && (
-                                <div className="status-done">
-                                    <CheckCircle size={18} /> Muvaffaqiyatli yakunlandi
-                                </div>
-                            )}
-                            {order.status === 'canceled' && (
-                                <div className="status-cancelled">
-                                    <X size={18} /> Buyurtma bekor qilingan
-                                </div>
-                            )}
-                            {/* Show Info for active/new orders */}
-                            {(order.status === 'new' || order.status === 'pending') && (
-                                <div className="status-info text-center text-gray-400 font-bold p-3 bg-gray-50 rounded-xl">
-                                    {order.status === 'new' ? 'Kuryer kutilmoqda...' : 'Kuryer yetkazmoqda...'}
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                    ))}
                 </div>
-            ))}
-        </div>
-    );
+            </div>
+        );
+    };
 
     const renderProducts = () => (
         <div className="products-manager animate-up">
@@ -1028,9 +1105,21 @@ const Admin = () => {
 
                 .status-badge { padding: 6px 10px; border-radius: 8px; font-weight: 700; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; height: fit-content; }
                 .status-badge.new { background: #FFF5F4; color: #FF4B3A; }
-                .status-badge.pending { background: #fff8e1; color: #fbc02d; }
+                .status-badge.pending { background: #FFF3CD; color: #B7791F; border: 1px solid #FFE0B2; }
                 .status-badge.delivered { background: #e8f5e9; color: #43a047; }
                 .status-badge.canceled { background: #f1f2f6; color: #7f8c8d; }
+
+                /* Order Filter Tabs */
+                .order-filter-tabs { display: flex; gap: 8px; margin-bottom: 16px; overflow-x: auto; padding-bottom: 6px; -webkit-overflow-scrolling: touch; }
+                .filter-tab { padding: 8px 14px; border-radius: 20px; border: 1px solid #e1e1e1; background: #fff; font-size: 13px; font-weight: 700; color: #636e72; cursor: pointer; white-space: nowrap; transition: 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.02); }
+                .filter-tab.active { background: #00302D; color: #fff; border-color: #00302D; }
+                .filter-tab.tab-pending.active { background: #e67e22; border-color: #e67e22; color: #fff; }
+                
+                /* Courier Details in Admin Order Card */
+                .courier-badge-box { background: #FFF9E6; border: 1px solid #FFE082; border-radius: 14px; padding: 12px 14px; margin-bottom: 15px; }
+                .courier-badge-title { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #D35400; font-weight: 700; }
+                .courier-badge-time { font-size: 12px; color: #7f8c8d; margin-top: 5px; padding-left: 24px; font-weight: 500; }
+                .status-pending-info { background: #FFF3CD; color: #856404; padding: 12px; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 14px; font-weight: 700; border: 1px solid #FFE69C; }
                 .modal-header h3 { font-size: 20px; font-weight: 800; margin: 0; }
                 .modal-header button { background: #f5f5f5; border: none; padding: 8px; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; }
 
